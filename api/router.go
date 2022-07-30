@@ -69,6 +69,10 @@ func RouteInit(listener net.Listener) *echo.Echo {
 			auth.GET("/images/:id/file", GetImageFile())
 			auth.PATCH("/images/:id/tags", PatchImageTag())
 			auth.DELETE("/images/:image_id/tags/:tag_id", DeleteImageTag())
+			auth.POST("/images/group", PostImagesGroup())
+			auth.GET("/images/group/:id", GetGroupImages())
+			auth.DELETE("/images/group/:id", DeleteImagesGroup())
+			auth.PATCH("/images/group/sort", PatchImagesGroupSort())
 
 			auth.GET("/tags", GetTags())
 			auth.POST("/tags", PostTag())

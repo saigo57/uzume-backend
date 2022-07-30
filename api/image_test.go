@@ -15,6 +15,7 @@ import (
 	"uzume_backend/model"
 	"uzume_backend/test_helper"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo"
 	"github.com/stretchr/testify/assert"
 )
@@ -143,6 +144,70 @@ func TestGetImagesPagenationAndSort_success(t *testing.T) {
 	assert.Equal(t, 2, images2.Page)
 	assert.Equal(t, 2, len(images2.Images))
 	assert.Equal(t, "テスト作者 last", images2.Images[1].Author)
+}
+
+// グループ済みの画像が含まれる場合、サムネ1枚だけ取得されること
+func TestGetImagesWithGroupedImage_success(t *testing.T) {
+	InitializeTest()
+	listener := test_helper.Listener()
+	defer listener.Close()
+	router := RouteInit(listener)
+
+	_, workspace := model.FixtureSetupOneWorkspace()
+	workspace.Save()
+	token, err := model.GenerateAccessToken(workspace.Id)
+	assert.NoError(t, err)
+
+	create_image := func(author string, created_at time.Time, groupId string, isGroupThumbNail bool) {
+		image, err := model.FixtureCreateImage(workspace, "testimage1.png")
+		image.CreatedAt = created_at
+		image.Save()
+		assert.NoError(t, err)
+		image.Memo = "テストメモ"
+		image.Author = author
+		image.GroupId = groupId
+		image.IsGroupThumbNail = isGroupThumbNail
+		image.AddTag(model.SYSTEM_TAG_UNCATEGORIZED)
+		image.Save()
+	}
+
+	time_now := time.Now()
+	new_uuid, err := uuid.NewRandom()
+	assert.NoError(t, err)
+	group_id1 := new_uuid.String()
+	group_id2 := new_uuid.String()
+	create_image("normalテスト作者 1", time_now.Add(-3*time.Hour), "", false)
+	create_image("groupテスト作者 1", time_now.Add(-2*time.Hour), group_id1, false)
+	create_image("groupテスト作者 2", time_now.Add(-2*time.Hour), group_id1, true)
+	create_image("groupテスト作者 3", time_now.Add(-2*time.Hour), group_id1, false)
+	create_image("groupテスト作者 4", time_now.Add(-1*time.Hour), group_id2, true)
+	create_image("groupテスト作者 5", time_now.Add(-1*time.Hour), group_id2, false)
+
+	workspace.RefleshCache()
+
+	body1, _ := json.Marshal(struct {
+		TagSearchType string `json:"tag_search_type"`
+		Tags          string `json:"tags"`
+	}{
+		TagSearchType: "or",
+		Tags:          model.SYSTEM_TAG_UNCATEGORIZED,
+	})
+	req := httptest.NewRequest("GET", "/api/v1/images", bytes.NewReader(body1))
+	req.Header.Set(echo.HeaderAuthorization, test_helper.BuildBasicAuthorization(workspace.Id, token))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	images := new(struct {
+		Page   int           `json:"page"`
+		Images []model.Image `json:"images"`
+	})
+	json.Unmarshal([]byte(rec.Body.String()), images)
+	assert.Equal(t, 1, images.Page)
+	assert.Equal(t, 3, len(images.Images))
+	assert.Equal(t, "groupテスト作者 4", images.Images[0].Author)
+	assert.Equal(t, "groupテスト作者 2", images.Images[1].Author)
+	assert.Equal(t, "normalテスト作者 1", images.Images[2].Author)
 }
 
 // access_tokenが間違っているとき、画像一覧の取得に失敗すること

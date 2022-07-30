@@ -7,9 +7,11 @@ import (
 )
 
 type imageCache struct {
-	SortedImages []*Image
-	IdToImages   map[string]*Image   // map[image_id]
-	TagToImages  map[string][]*Image // map[tag_id]
+	SortedImages        []*Image
+	GroupedSortedImages []*Image
+	IdToImages          map[string]*Image   // map[image_id]
+	GroupIdToImages     map[string][]*Image // map[group_id]
+	TagToImages         map[string][]*Image // map[tag_id]
 }
 
 var g_image_cache = make(map[string]*imageCache) // map[workspace_id]
@@ -50,7 +52,7 @@ func getAllImageCache(workspace *Workspace) ([]*Image, error) {
 		return []*Image{}, nil
 	}
 
-	return g_image_cache[workspace.Id].SortedImages, nil
+	return g_image_cache[workspace.Id].GroupedSortedImages, nil
 }
 
 func getImageCacheByTagId(workspace *Workspace, tag_id string) ([]*Image, error) {
@@ -65,6 +67,20 @@ func getImageCacheByTagId(workspace *Workspace, tag_id string) ([]*Image, error)
 	}
 
 	return g_image_cache[workspace.Id].TagToImages[tag_id], nil
+}
+
+func getImageCacheByGroupId(workspace *Workspace, group_id string) ([]*Image, error) {
+	if !isImageCacheExist(workspace) {
+		if err := refleshImageCache(workspace); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, ok := g_image_cache[workspace.Id]; !ok {
+		return []*Image{}, nil
+	}
+
+	return g_image_cache[workspace.Id].GroupIdToImages[group_id], nil
 }
 
 func createImageCache(image *Image) {
@@ -144,18 +160,45 @@ func updateImageCache(next_image *Image, prev_image *Image) {
 		}
 	}
 	image_cache.TagToImages = new_tag_to_images
+
+	if image.GroupId != prev_image.GroupId {
+		// 古い方のグループから削除
+		if prev_image.GroupId != "" {
+			var new_group_to_images []*Image = nil
+			for _, img := range image_cache.GroupIdToImages[prev_image.GroupId] {
+				if img.GroupId != prev_image.GroupId {
+					new_group_to_images = append(new_group_to_images, image)
+				}
+			}
+			image_cache.GroupIdToImages[prev_image.GroupId] = new_group_to_images
+		}
+		// 新しい方のグループに追加
+		if image.GroupId != "" {
+			image_cache.GroupIdToImages[image.GroupId] = append(image_cache.GroupIdToImages[image.GroupId], image)
+		}
+
+		resetSortedImages(image.Workspace)
+	}
 }
 
 func resetSortedImages(workspace *Workspace) error {
 	g_image_cache[workspace.Id].SortedImages = make([]*Image, len(g_image_cache[workspace.Id].IdToImages))
 
-	var i = 0
+	var i = 0 // TODO: このiは_と同義では？
 	for _, v := range g_image_cache[workspace.Id].IdToImages {
 		g_image_cache[workspace.Id].SortedImages[i] = v
 		i++
 	}
 
 	sortImageList(g_image_cache[workspace.Id].SortedImages)
+
+	g_image_cache[workspace.Id].GroupedSortedImages = nil
+	for _, v := range g_image_cache[workspace.Id].SortedImages {
+		if v.GroupId == "" || v.IsGroupThumbNail {
+			// group化されていないか、グループのサムネだったらリストに入れる
+			g_image_cache[workspace.Id].GroupedSortedImages = append(g_image_cache[workspace.Id].GroupedSortedImages, v)
+		}
+	}
 
 	return nil
 }
@@ -173,6 +216,7 @@ func refleshImageCache(workspace *Workspace) error {
 
 	cache := new(imageCache)
 	cache.IdToImages = make(map[string]*Image)
+	cache.GroupIdToImages = make(map[string][]*Image)
 	cache.TagToImages = make(map[string][]*Image)
 
 	for _, f := range all_image_files {
@@ -188,10 +232,19 @@ func refleshImageCache(workspace *Workspace) error {
 		}
 
 		cache.IdToImages[image.Id] = image
+		if image.GroupId != "" {
+			cache.GroupIdToImages[image.GroupId] = append(cache.GroupIdToImages[image.GroupId], image)
+		}
 		for _, t := range image.Tags {
 			cache.TagToImages[t] = append(cache.TagToImages[t], image)
 		}
 	}
+
+	// TODO: IsGroupThumbNailフラグがおかしかった場合に調整する
+	// for group_id, images := range cache.GroupIdToImages {
+	// 	for image := range images {
+	// 	}
+	// }
 
 	g_image_cache[workspace.Id] = cache
 	resetSortedImages(workspace)

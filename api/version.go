@@ -21,7 +21,7 @@ func GetVersion() echo.HandlerFunc {
 
 		if DEBUG_MODE {
 			project_root := os.Getenv("PROJECT_ROOT")
-			bytes, err := ioutil.ReadFile(filepath.Join(project_root, "/backend/version"))
+			bytes, err := ioutil.ReadFile(filepath.Join(project_root, "/version"))
 			if err != nil {
 				panic(err)
 			}
