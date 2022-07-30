@@ -28,16 +28,19 @@ const (
 )
 
 type Image struct {
-	Id        string     `json:"image_id"`
-	FileName  string     `json:"file_name"`
-	Ext       string     `json:"ext"`
-	Width     int        `json:"width"`
-	Height    int        `json:"height"`
-	Memo      string     `json:"memo"`
-	Author    string     `json:"author"`
-	CreatedAt time.Time  `json:"created_at"`
-	Tags      []string   `json:"tags"`
-	Workspace *Workspace `json:"-"`
+	Id               string     `json:"image_id"`
+	FileName         string     `json:"file_name"`
+	Ext              string     `json:"ext"`
+	Width            int        `json:"width"`
+	Height           int        `json:"height"`
+	Memo             string     `json:"memo"`
+	Author           string     `json:"author"`
+	CreatedAt        time.Time  `json:"created_at"`
+	Tags             []string   `json:"tags"`
+	GroupId          string     `json:"group_id"`
+	SortOfGroup      int        `json:"sort_of_group"`
+	IsGroupThumbNail bool       `json:"is_group_thumb_nail"`
+	Workspace        *Workspace `json:"-"`
 }
 
 func NewImage(workspace *Workspace) *Image {
@@ -170,6 +173,10 @@ func sortImageList(image_list []*Image) {
 	sort.Slice(image_list, func(i, j int) bool { return image_list[i].CreatedAt.After(image_list[j].CreatedAt) })
 }
 
+func sortImageListByGroupSort(image_list []*Image) {
+	sort.Slice(image_list, func(i, j int) bool { return image_list[i].SortOfGroup < image_list[j].SortOfGroup })
+}
+
 func SearchImages(workspace *Workspace, tag_list []string, search_type string, page int) ([]*Image, error) {
 	pagination := func(image_list []*Image) []*Image {
 		begin := (page - 1) * PAGENATION_PER
@@ -244,6 +251,77 @@ func SearchImages(workspace *Workspace, tag_list []string, search_type string, p
 
 	sortImageList(ans)
 	return pagination(ans), nil
+}
+
+func GetGroupImages(workspace *Workspace, group_id string) ([]*Image, error) {
+	images, err := getImageCacheByGroupId(workspace, group_id)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(images) == 0 {
+		return nil, errors.New("group_id Not Found")
+	}
+
+	sortImageListByGroupSort(images)
+
+	return images, nil
+}
+
+func GroupingImages(image_list []*Image) error {
+	if len(image_list) < 2 {
+		return errors.New("グループ化には最低2枚必要です")
+	}
+	group_id := ""
+	for _, image := range image_list {
+		if image.GroupId == "" {
+			continue
+		}
+
+		if group_id != "" && group_id != image.GroupId {
+			return errors.New("複数のグループIDが含まれています")
+		}
+		group_id = image.GroupId
+	}
+
+	// 渡された画像のいずれかがグループに属している場合は、渡された画像をそのグループに参加させる
+	// 渡された画像一覧がどのグループにも属していない場合新たなグループを作成する
+	if group_id == "" {
+		new_uuid, err := uuid.NewRandom()
+		if err != nil {
+			return err
+		}
+		group_id = new_uuid.String()
+		// 新規グループのときは一番最初をサムネにする
+		image_list[0].IsGroupThumbNail = true
+	}
+
+	for i, image := range image_list {
+		image.GroupId = group_id
+		image.SortOfGroup = i + 1
+	}
+
+	return nil
+}
+
+func DeleteGroupAndSave(workspace *Workspace, group_id string) error {
+	images, err := getImageCacheByGroupId(workspace, group_id)
+	if err != nil {
+		return err
+	}
+
+	if len(images) == 0 {
+		return errors.New("group_id Not Found")
+	}
+
+	for _, image := range images {
+		image.GroupId = ""
+		image.SortOfGroup = 0
+		image.IsGroupThumbNail = false
+		image.Save()
+	}
+
+	return nil
 }
 
 func (this *Image) HaveTag(tag_id string) bool {

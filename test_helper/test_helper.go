@@ -52,7 +52,7 @@ func BuildBasicAuthorization(id, token string) string {
 
 func TestDirRoot() string {
 	project_root := os.Getenv("PROJECT_ROOT")
-	return filepath.Join(project_root, "/backend/tmp/uzume_test_dirs/")
+	return filepath.Join(project_root, "/tmp/uzume_test_dirs/")
 }
 
 func BuildFilePath(path string) string {

@@ -17,21 +17,21 @@ type ImageResponse struct {
 	Tags    []string `json:"tags"`
 }
 
-func GetQueryParamTags(tags string) []string {
-	var tag_list []string
-	for _, tag := range strings.Split(tags, ",") {
+func QueryParamToArray(str string) []string {
+	var arr []string
+	for _, tag := range strings.Split(str, ",") {
 		if len(tag) > 0 {
-			tag_list = append(tag_list, tag)
+			arr = append(arr, tag)
 		}
 	}
 
-	return tag_list
+	return arr
 }
 
 func GetImages() echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
 		tag_search_type := c.QueryParam("tag_search_type")
-		var tag_list = GetQueryParamTags(c.QueryParam("tags"))
+		var tag_list = QueryParamToArray(c.QueryParam("tags"))
 		var page_str = c.QueryParam("page")
 		workspace_id := helper.LoggedinWrokspaceId(c)
 
@@ -58,6 +58,32 @@ func GetImages() echo.HandlerFunc {
 			Images []*model.Image `json:"images"`
 		}{
 			Page:   page,
+			Images: images,
+		})
+	}
+}
+
+func GetGroupImages() echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+		group_id := c.Param("id")
+		workspace_id := helper.LoggedinWrokspaceId(c)
+
+		workspace, err := model.FindWorkspaceById(workspace_id)
+		if err != nil {
+			return err
+		}
+
+		images, err := model.GetGroupImages(workspace, group_id)
+		if err != nil {
+			if err.Error() == "group_id Not Found" {
+				return c.JSON(http.StatusNotFound, helper.ErrorMessage{ErrorMessage: err.Error()})
+			}
+			return err
+		}
+
+		return c.JSON(http.StatusOK, struct {
+			Images []*model.Image `json:"images"`
+		}{
 			Images: images,
 		})
 	}
@@ -130,7 +156,7 @@ func PostImages() echo.HandlerFunc {
 		}
 		author := c.FormValue("author")
 		memo := c.FormValue("memo")
-		var tag_list = GetQueryParamTags(c.FormValue("tags"))
+		var tag_list = QueryParamToArray(c.FormValue("tags"))
 		workspace_id := helper.LoggedinWrokspaceId(c)
 
 		workspace, err := model.FindWorkspaceById(workspace_id)
@@ -244,5 +270,111 @@ func DeleteImageTag() echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusNoContent, "")
+	}
+}
+
+func PostImagesGroup() echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+		param := new(struct {
+			Images string `json:"images"`
+		})
+		if err := c.Bind(param); err != nil {
+			return err
+		}
+		image_id_list := QueryParamToArray(param.Images)
+		workspace_id := helper.LoggedinWrokspaceId(c)
+
+		workspace, err := model.FindWorkspaceById(workspace_id)
+		if err != nil {
+			return err
+		}
+
+		var image_list []*model.Image = nil
+		for _, image_id := range image_id_list {
+			image, err := model.FindImageById(workspace, image_id)
+			if err != nil {
+				return err
+			}
+			image_list = append(image_list, image)
+		}
+
+		if err := model.GroupingImages(image_list); err != nil {
+			return err
+		}
+		// TODO: トランザクション作ってロールバックできるようにする？
+		for _, image := range image_list {
+			if err := image.Save(); err != nil {
+				return err
+			}
+		}
+
+		return c.JSON(http.StatusCreated, struct {
+			Images []*model.Image `json:"images"`
+		}{
+			Images: image_list,
+		})
+	}
+}
+
+func DeleteImagesGroup() echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+		group_id := c.Param("id")
+		workspace_id := helper.LoggedinWrokspaceId(c)
+
+		workspace, err := model.FindWorkspaceById(workspace_id)
+		if err != nil {
+			return err
+		}
+
+		if err := model.DeleteGroupAndSave(workspace, group_id); err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, "")
+	}
+}
+
+func PatchImagesGroupSort() echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+		param := new(struct {
+			Images []string `json:"images"`
+		})
+		if err := c.Bind(param); err != nil {
+			return err
+		}
+		image_id_list := param.Images
+		workspace_id := helper.LoggedinWrokspaceId(c)
+
+		workspace, err := model.FindWorkspaceById(workspace_id)
+		if err != nil {
+			return err
+		}
+
+		// 最初の一枚からgroup_idを割り出す
+		image, err := model.FindImageById(workspace, image_id_list[0])
+		if err != nil {
+			return err
+		}
+		group_id := image.GroupId
+
+		images, err := model.GetGroupImages(workspace, group_id)
+		if err != nil {
+			if err.Error() == "group_id Not Found" {
+				return c.JSON(http.StatusNotFound, helper.ErrorMessage{ErrorMessage: err.Error()})
+			}
+			return err
+		}
+
+		// 遅いようなら連想配列を使うなどして高速化を検討する
+		for i, image_id := range image_id_list {
+			for _, image := range images {
+				if image.Id == image_id {
+					image.SortOfGroup = i + 1
+					image.Save()
+				}
+			}
+		}
+
+		return c.JSON(http.StatusOK, "")
 	}
 }
