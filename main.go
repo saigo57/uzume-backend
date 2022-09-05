@@ -16,6 +16,8 @@ var version string
 
 func main() {
 	fmt.Printf("uzume backend %s\n", version)
+	fmt.Printf("LICENSE: https://github.com/Saigo1997/uzume-backend/blob/main/LICENSE\n")
+	fmt.Printf("NOTICE: https://github.com/Saigo1997/uzume-backend/blob/main/NOTICE\n")
 
 	config, err := model.NewConfig()
 	if err != nil {
