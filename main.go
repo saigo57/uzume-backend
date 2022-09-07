@@ -16,8 +16,9 @@ var version string
 
 func main() {
 	fmt.Printf("uzume backend %s\n", version)
-	fmt.Printf("LICENSE: https://github.com/Saigo1997/uzume-backend/blob/main/LICENSE\n")
-	fmt.Printf("NOTICE: https://github.com/Saigo1997/uzume-backend/blob/main/NOTICE\n")
+	var githubBaseUrl = fmt.Sprintf("https://github.com/Saigo1997/uzume-backend/blob/v%s", version)
+	fmt.Printf("LICENSE: %s/LICENSE\n", githubBaseUrl)
+	fmt.Printf("NOTICE: %s/NOTICE\n", githubBaseUrl)
 
 	config, err := model.NewConfig()
 	if err != nil {
