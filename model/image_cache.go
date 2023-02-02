@@ -179,6 +179,37 @@ func updateImageCache(next_image *Image, prev_image *Image) {
 
 		resetSortedImages(image.Workspace)
 	}
+
+	// グループthumbが変化したとき
+	if image.IsGroupThumbNail != prev_image.IsGroupThumbNail {
+		resetSortedImages(image.Workspace)
+		if image.IsGroupThumbNail {
+			// groupedリストに追加
+			if !isExistCacheInGroupedSortedImages(image) {
+				image_cache.GroupedSortedImages = append(image_cache.GroupedSortedImages, image)
+			}
+		}
+
+		if !image.IsGroupThumbNail {
+			// grouped リストから削除
+			var new_grouped_sorted_images []*Image = nil
+			for _, img := range image_cache.GroupedSortedImages {
+				if img.Id != image.Id {
+					new_grouped_sorted_images = append(new_grouped_sorted_images, image)
+				}
+			}
+			image_cache.GroupedSortedImages = new_grouped_sorted_images
+		}
+	}
+}
+
+func isExistCacheInGroupedSortedImages(image *Image) bool {
+	for _, img := range g_image_cache[image.Workspace.Id].GroupedSortedImages {
+		if img.Id == image.Id {
+			return true
+		}
+	}
+	return false
 }
 
 func resetSortedImages(workspace *Workspace) error {

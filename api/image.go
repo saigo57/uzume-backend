@@ -365,13 +365,39 @@ func PatchImagesGroupSort() echo.HandlerFunc {
 			return err
 		}
 
+		prev_thumb_image, err := model.FindGroupThumbImage(workspace, group_id)
+		for err != nil {
+			return err
+		}
+
+		for _, image := range images {
+			image.IsGroupThumbNail = false
+		}
+
 		// 遅いようなら連想配列を使うなどして高速化を検討する
 		for i, image_id := range image_id_list {
 			for _, image := range images {
 				if image.Id == image_id {
 					image.SortOfGroup = i + 1
-					image.Save()
+
+					if i == 0 {
+						// 次のthumbのとき
+						image.IsGroupThumbNail = true
+						if prev_thumb_image != nil {
+							err = prev_thumb_image.HandOverTagsGroupThumbTo(image)
+							if err != nil {
+								return err
+							}
+						}
+					}
 				}
+			}
+		}
+
+		for _, image := range images {
+			err = image.Save()
+			if err != nil {
+				return err
 			}
 		}
 

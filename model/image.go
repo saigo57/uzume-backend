@@ -324,6 +324,42 @@ func DeleteGroupAndSave(workspace *Workspace, group_id string) error {
 	return nil
 }
 
+func FindGroupThumbImage(workspace *Workspace, group_id string) (*Image, error) {
+	images, err := getImageCacheByGroupId(workspace, group_id)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, image := range images {
+		if image.IsGroupThumbNail {
+			return image, nil
+		}
+	}
+
+	return nil, errors.New(fmt.Sprintf("group_idのthumbが見つかりませんでした[%s]", group_id))
+}
+
+func (this *Image) HandOverTagsGroupThumbTo(next_thumb_image *Image) error {
+	// 新旧thumbのタグをマージする
+	tags_map := make(map[string]struct{})
+	for _, tag := range next_thumb_image.Tags {
+		tags_map[tag] = struct{}{}
+	}
+	for _, tag := range this.Tags {
+		tags_map[tag] = struct{}{}
+	}
+
+	var next_thumb_tags []string
+	for key, _ := range tags_map {
+		next_thumb_tags = append(next_thumb_tags, key)
+	}
+
+	// 新しいthumbのタグにマージしたタグを設定
+	next_thumb_image.Tags = next_thumb_tags
+
+	return nil
+}
+
 func (this *Image) HaveTag(tag_id string) bool {
 	for _, tag := range this.Tags {
 		if tag == tag_id {
