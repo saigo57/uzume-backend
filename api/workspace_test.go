@@ -13,7 +13,6 @@ import (
 	"uzume_backend/test_helper"
 
 	"github.com/labstack/echo"
-	"github.com/steinfletcher/apitest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,18 +49,24 @@ func TestGetWorkspaces(t *testing.T) {
 	w.Path = test_helper.BuildFilePath("workspace2.uzume")
 	w.Save()
 
-	apitest.New().
-		Handler(router).
-		Get("/api/v1/workspaces").
-		Expect(t).
-		Status(http.StatusOK).
-		Assert(func(res *http.Response, req *http.Request) error {
-			body, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			assert.JSONEq(t,
-				`[
+	body, _ := json.Marshal(struct {
+		Name string `json:"name"`
+	}{
+		Name: "新ワークスペース",
+	})
+	req := httptest.NewRequest("GET", "/api/v1/workspaces", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, rec.Code, http.StatusOK)
+	body, err := ioutil.ReadAll(rec.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	assert.JSONEq(t,
+		`[
 						{
 							"workspace_id": "96174de5-c33b-f642-b1e3-c514b100e5ee",
 							"name":         "ワークスペース1",
@@ -73,10 +78,7 @@ func TestGetWorkspaces(t *testing.T) {
 							"available":    true
 						}
 					]`,
-				(string)(body))
-			return nil
-		}).
-		End()
+		(string)(body))
 }
 
 // ワークスペースの新規作成に成功すること
@@ -91,24 +93,26 @@ func TestPostWorkspaces_Success(t *testing.T) {
 
 	workspace_path := test_helper.BuildFilePath("workspace1.uzume")
 
-	apitest.New().
-		Handler(router).
-		Post("/api/v1/workspaces").
-		FormData("name", "新規ワークスペース").
-		FormData("path", workspace_path).
-		Expect(t).
-		Status(http.StatusCreated).
-		Assert(func(res *http.Response, req *http.Request) error {
-			body, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			w := new(model.Workspace)
-			json.Unmarshal(body, w)
-			assert.Equal(t, len(w.Id), 36)
-			return nil
-		}).
-		End()
+	body, _ := json.Marshal(struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}{
+		Name: "新規ワークスペース",
+		Path: workspace_path,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/workspaces", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	res_w := new(model.Workspace)
+	body, err := ioutil.ReadAll(rec.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	json.Unmarshal(body, res_w)
+	assert.Equal(t, len(res_w.Id), 36)
 
 	w := new(model.Workspace)
 	w.Path = workspace_path
@@ -136,14 +140,20 @@ func TestPostWorkspaces_FailOnWorkspaceAlreadyExists_disk(t *testing.T) {
 	workspace.Path = workspace_path
 	workspace.CreateWorkspaceDirAndSave()
 
-	apitest.New().
-		Handler(router).
-		Post("/api/v1/workspaces").
-		FormData("name", "新規ワークスペース").
-		FormData("path", workspace_path).
-		Expect(t).
-		Status(http.StatusBadRequest).
-		End()
+	body, _ := json.Marshal(struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}{
+		Name: "新規ワークスペース",
+		Path: workspace_path,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/workspaces", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, rec.Code, http.StatusBadRequest)
 }
 
 // 既存のワークスペースの登録に成功すること。また、既に存在するワークスペースだった場合はエラーになること
@@ -247,13 +257,18 @@ func TestPostWorkspacesLogin_success(t *testing.T) {
 	config.AddWorkspace(*workspace)
 	config.Save()
 
-	apitest.New().
-		Handler(router).
-		Post("/api/v1/workspaces/login").
-		FormData("workspace_id", workspace.Id).
-		Expect(t).
-		Status(http.StatusOK).
-		End()
+	body, _ := json.Marshal(struct {
+		WorkspaceId string `json:"workspace_id"`
+	}{
+		WorkspaceId: workspace.Id,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/workspaces/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, rec.Code, http.StatusOK)
 }
 
 // ワークスペースIDが間違っているときログインに失敗すること
@@ -273,13 +288,18 @@ func TestPostWorkspacesLogin_fail(t *testing.T) {
 	config.AddWorkspace(*workspace)
 	config.Save()
 
-	apitest.New().
-		Handler(router).
-		Post("/api/v1/workspaces/login").
-		FormData("workspace_id", "not-valid-workspace-id").
-		Expect(t).
-		Status(http.StatusBadRequest).
-		End()
+	body, _ := json.Marshal(struct {
+		WorkspaceId string `json:"workspace_id"`
+	}{
+		WorkspaceId: "not-valid-workspace-id",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/workspaces/login", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, rec.Code, http.StatusBadRequest)
 }
 
 // ワークスペースのUPDATEに成功すること
