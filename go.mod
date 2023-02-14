@@ -9,7 +9,6 @@ require (
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.3.1
 	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/steinfletcher/apitest v1.5.11
 	github.com/stretchr/testify v1.7.1
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/image v0.0.0-20220412021310-99f80d0ecbab
