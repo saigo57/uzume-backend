@@ -9,6 +9,9 @@ use axum::{
 use serde::{Serialize, Deserialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use utoipa::ToSchema;
+use utoipa_swagger_ui::SwaggerUi;
+use utoipa::OpenApi;
 
 const DEFAULT_PORT: u16 = 22113;
 
@@ -19,14 +22,19 @@ trait JsonModel {
     async fn save(&self) -> Result<(), std::io::Error>;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 struct WorkspaceInfo {
+    #[schema(example = r"C:\Users\user\workspace")]
     path: String,
+
+    #[schema(example = "a0b257bb-b7c6-46f3-b27c-31f8ce1c3703")]
     workspace_id: String,
+
+    #[schema(example = "ワークスペース名")]
     name: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 struct Config {
     workspace_list: Vec<WorkspaceInfo>,
 }
@@ -47,6 +55,13 @@ struct HelloRequest {
     name: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/workspaces",
+    responses(
+        (status = 200, description = "All workspaces", body = Config)
+    )
+)]
 async fn get_workspaces() -> (StatusCode, Json<Config>) {
     let json = tokio::fs::read_to_string("./config.json").await.unwrap();
     let config = serde_json::from_str(&json).unwrap();
@@ -71,6 +86,20 @@ fn parse_args(args: &[String]) -> Result<u16, String> {
     Err(format!("invalid arg num: {}", args.len()))
 }
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        get_workspaces,
+    ),
+    components(
+        schemas(
+            Config,
+            WorkspaceInfo,
+        ),
+    ),
+)]
+struct ApiDoc;
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
@@ -86,6 +115,7 @@ async fn main() {
     println!("port: {}", port);
 
     let app = Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/api/v1/workspaces", get(get_workspaces))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
