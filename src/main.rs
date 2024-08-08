@@ -6,6 +6,7 @@ use axum::{
     Json,
     Router,
 };
+use serde::de::DeserializeOwned;
 use serde::{Serialize, Deserialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -17,9 +18,22 @@ const DEFAULT_PORT: u16 = 22113;
 
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
-trait JsonModel {
-    const FILE_PATH: &'static str;
-    async fn save(&self) -> Result<(), std::io::Error>;
+trait JsonModel: Sized + DeserializeOwned + Serialize {
+    fn file_path(&self) -> String;
+
+    async fn save(&self) -> Result<(), std::io::Error> {
+        let json = serde_json::to_string_pretty(&self).unwrap();
+        let mut file = File::create(self.file_path()).await?;
+        file.write_all(json.as_bytes()).await?;
+        Ok(())
+    }
+
+    fn new(file_path: &str) -> Result<Self, std::io::Error> {
+        let json_file = std::fs::File::open(file_path).unwrap();
+        let reader = std::io::BufReader::new(json_file);
+        let config = serde_json::from_reader(reader).unwrap();
+        Ok(config)
+    }
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -39,20 +53,22 @@ struct Config {
     workspace_list: Vec<WorkspaceInfo>,
 }
 
-impl JsonModel for Config {
+impl Config {
     const FILE_PATH: &'static str = "./config.json";
 
-    async fn save(&self) -> Result<(), std::io::Error> {
-        let json = serde_json::to_string_pretty(&self).unwrap();
-        let mut file = File::create(Self::FILE_PATH).await?;
-        file.write_all(json.as_bytes()).await?;
-        Ok(())
+    fn new() -> Result<Self, std::io::Error> {
+        let json_file = std::fs::File::open(Self::FILE_PATH).unwrap();
+        let reader = std::io::BufReader::new(json_file);
+        let config = serde_json::from_reader(reader).unwrap();
+        Ok(config)
     }
+
 }
 
-#[derive(Serialize, Deserialize)]
-struct HelloRequest {
-    name: String,
+impl JsonModel for Config {
+    fn file_path(&self) -> String {
+        Self::FILE_PATH.to_string()
+    }
 }
 
 #[utoipa::path(
@@ -63,12 +79,9 @@ struct HelloRequest {
     )
 )]
 async fn get_workspaces() -> (StatusCode, Json<Config>) {
-    let json = tokio::fs::read_to_string("./config.json").await.unwrap();
-    let config = serde_json::from_str(&json).unwrap();
- 
+    let config = Config::new().unwrap();
     (StatusCode::OK, Json(config))
 }
-
 
 fn parse_args(args: &[String]) -> Result<u16, String> {
     if args.len() == 1 {
