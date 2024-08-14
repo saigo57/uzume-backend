@@ -1,8 +1,11 @@
 use std::env;
+use uuid::Uuid;
 use axum::{
     routing::get,
+    routing::post,
     http::StatusCode,
     extract::DefaultBodyLimit,
+    extract::Extension,
     Json,
     Router,
 };
@@ -13,6 +16,9 @@ use tokio::io::AsyncWriteExt;
 use utoipa::ToSchema;
 use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
+use rusqlite::Connection;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 const DEFAULT_PORT: u16 = 22113;
 
@@ -65,6 +71,15 @@ impl Config {
 
 }
 
+#[derive(Serialize)]
+struct LoginInfo {
+    access_token: String,
+}
+#[derive(Serialize)]
+struct BasicApiError {
+    error_message: String,
+}
+
 impl JsonModel for Config {
     fn file_path(&self) -> String {
         Self::FILE_PATH.to_string()
@@ -81,6 +96,42 @@ impl JsonModel for Config {
 async fn get_workspaces() -> (StatusCode, Json<Config>) {
     let config = Config::new().unwrap();
     (StatusCode::OK, Json(config))
+}
+
+#[derive(Deserialize)]
+struct LoginWorkspaceParams {
+    workspace_id: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/workspaces/login",
+    responses(
+        (status = 200, description = "Login success", body = LoginInfo),
+        (status = 400, description = "Login failed", body = BasicApiError),
+    )
+)]
+async fn login_workspace(
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+    Json(body): Json<LoginWorkspaceParams>,
+) -> (StatusCode, Json<LoginInfo>) {
+    let conn = conn.lock().await;
+    let mut stmt = conn.prepare("SELECT access_token, workspace_id FROM auth").unwrap();
+    stmt.query_map([], |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    }).unwrap().for_each(|result| {
+        let (access_token, workspace_id): (String, String) = result.unwrap();
+        println!("access_token: {}, workspace_id: {}", access_token, workspace_id);
+    });
+    let access_token = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
+        [access_token.clone(), body.workspace_id],
+    );
+
+
+    (StatusCode::OK, Json(LoginInfo { access_token: access_token }))
+
 }
 
 fn parse_args(args: &[String]) -> Result<u16, String> {
@@ -127,10 +178,22 @@ async fn main() {
 
     println!("port: {}", port);
 
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute(
+        "CREATE TABLE auth (
+            access_token TEXT,
+            workspace_id TEXT
+        )",
+        [],
+    ).unwrap();
+    let workspace_router = Router::new()
+        .route("/api/v1/workspaces", get(get_workspaces))
+        .route("/api/v1/workspaces/login", post(login_workspace));
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .route("/api/v1/workspaces", get(get_workspaces))
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024));
+        .nest("/api/v1/workspace", workspace_router)
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
+        .layer(Extension(Arc::new(Mutex::new(conn))));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
