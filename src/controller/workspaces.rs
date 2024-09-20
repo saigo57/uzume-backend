@@ -98,7 +98,10 @@ struct LoginWorkspaceParams {
         (status = 200, description = "All workspaces", body = Config)
     )
 )]
-async fn get_workspaces() -> (StatusCode, Json<Config>) {
+async fn get_workspaces(
+    Extension(workspace_id): Extension<String>,
+) -> (StatusCode, Json<Config>) {
+    println!("workspace_id: {}", workspace_id);
     let config = Config::new().unwrap();
     (StatusCode::OK, Json(config))
 }
@@ -123,6 +126,7 @@ async fn login_workspace(
         let (access_token, workspace_id): (String, String) = result.unwrap();
         println!("access_token: {}, workspace_id: {}", access_token, workspace_id);
     });
+
     let access_token = Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
