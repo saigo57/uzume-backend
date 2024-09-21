@@ -1,23 +1,11 @@
 use std::env;
-use axum::response::Response;
-use uuid::Uuid;
 use axum::{
-    routing::get,
-    routing::post,
-    http::StatusCode,
-    extract::{Extension, DefaultBodyLimit, Request, State},
-    Json,
+    extract::{Extension, DefaultBodyLimit},
     Router,
-    middleware::{self, Next},
 };
-use serde::de::DeserializeOwned;
-use serde::{Serialize, Deserialize};
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-use utoipa::ToSchema;
 use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -43,52 +31,7 @@ fn parse_args(args: &[String]) -> Result<u16, String> {
     Err(format!("invalid arg num: {}", args.len()))
 }
 
-async fn auth(
-    State(conn): State<Arc<Mutex<Connection>>>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    let auth_header = match req.headers().get("Authorization").cloned() {
-        Some(h) => h,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
 
-    let auth_header_str = match auth_header.to_str() {
-        Ok(s) => s,
-        Err(_) => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    let prefix = "Basic ";
-    if !auth_header_str.starts_with(prefix) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    let v: Vec<&str> = auth_header_str[prefix.len()..].split(':').collect();
-    if v.len() != 2 {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    let workspace_id = v[0];
-    let access_token = v[1];
-
-    {
-        // このconnのスコープを早めに閉じないと、next.runでロックが解除されないなどの影響？でビルドエラーになる
-        let conn = conn.lock().await;
-        let mut stmt = conn.prepare("SELECT 1 FROM auth WHERE workspace_id = ?1 AND access_token = ?2").unwrap();
-        
-        let rows = stmt.query_map(params![workspace_id, access_token], |_row| {
-            Ok(1)
-        }).unwrap();
-
-        // 上の組み合わせが見つからなかったら認証エラー
-        if rows.count() == 0 {
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-    }
-
-    req.extensions_mut().insert(workspace_id.to_string());
-    Ok(next.run(req).await)
-}
 
 #[tokio::main]
 async fn main() {
@@ -107,8 +50,7 @@ async fn main() {
     let conn = Connection::open_in_memory().unwrap();
     let conn = Arc::new(Mutex::new(conn));
     let v1_api_router = Router::new()
-        .nest("/workspaces", controller::workspaces::router())
-        .route_layer(middleware::from_fn_with_state(conn.clone(), auth));
+        .nest("/workspaces", controller::workspaces::router(conn.clone()));
     match schema::create_schema(conn.clone()).await {
         Ok(_) => {
             println!("schema created.");

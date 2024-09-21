@@ -1,10 +1,9 @@
 
 use uuid::Uuid;
 use axum::{
-    routing::get,
-    routing::post,
+    self,
+    routing::{get, post, patch},
     http::StatusCode,
-    extract::DefaultBodyLimit,
     extract::Extension,
     Json,
     Router,
@@ -14,13 +13,15 @@ use serde::{Serialize, Deserialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use utoipa::ToSchema;
-use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::controller::middleware::auth;
+
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
+#[allow(dead_code)]
 trait JsonModel: Sized + DeserializeOwned + Serialize {
     fn file_path(&self) -> String;
 
@@ -68,11 +69,11 @@ impl Config {
 
 }
 
-
 #[derive(Serialize)]
 struct LoginInfo {
     access_token: String,
 }
+
 #[derive(Serialize)]
 struct BasicApiError {
     error_message: String,
@@ -98,7 +99,19 @@ struct LoginWorkspaceParams {
         (status = 200, description = "All workspaces", body = Config)
     )
 )]
-async fn get_workspaces(
+async fn get_workspaces() -> (StatusCode, Json<Config>) {
+    let config = Config::new().unwrap();
+    (StatusCode::OK, Json(config))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/workspaces",
+    responses(
+        (status = 200, description = "All workspaces", body = Config)
+    )
+)]
+async fn patch_workspaces(
     Extension(workspace_id): Extension<String>,
 ) -> (StatusCode, Json<Config>) {
     println!("workspace_id: {}", workspace_id);
@@ -117,25 +130,23 @@ async fn get_workspaces(
 async fn login_workspace(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Json(body): Json<LoginWorkspaceParams>,
-) -> (StatusCode, Json<LoginInfo>) {
+) -> (StatusCode, Result<Json<LoginInfo>, Json<BasicApiError>>) {
     let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT access_token, workspace_id FROM auth").unwrap();
-    stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?))
-    }).unwrap().for_each(|result| {
-        let (access_token, workspace_id): (String, String) = result.unwrap();
-        println!("access_token: {}, workspace_id: {}", access_token, workspace_id);
-    });
-
     let access_token = Uuid::new_v4().to_string();
-    conn.execute(
+    match conn.execute(
         "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
         [access_token.clone(), body.workspace_id],
-    );
+    ) {
+        Ok(_) => {},
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    }
 
-
-    (StatusCode::OK, Json(LoginInfo { access_token: access_token }))
-
+    (StatusCode::OK, Ok(Json(LoginInfo { access_token })))
 }
 
 #[derive(OpenApi)]
@@ -152,8 +163,15 @@ async fn login_workspace(
 )]
 pub struct ApiDoc;
 
-pub fn router() -> Router {
-    Router::new()
+pub fn router(conn: Arc<Mutex<Connection>>) -> Router {
+    let noauth_endpoints = Router::new()
         .route("/", get(get_workspaces))
-        .route("/login", post(login_workspace))
+        .route("/login", post(login_workspace));
+    let auth_endpoints = Router::new()
+        .route("/", patch(patch_workspaces))
+        .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth));
+
+    Router::new()
+        .nest("/", noauth_endpoints)
+        .nest("/", auth_endpoints)
 }
