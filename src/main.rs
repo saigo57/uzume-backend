@@ -9,8 +9,10 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-mod controller;
 mod schema;
+mod initialize;
+mod controller;
+mod model;
 
 const DEFAULT_PORT: u16 = 22113;
 
@@ -49,8 +51,6 @@ async fn main() {
 
     let conn = Connection::open_in_memory().unwrap();
     let conn = Arc::new(Mutex::new(conn));
-    let v1_api_router = Router::new()
-        .nest("/workspaces", controller::workspaces::router(conn.clone()));
     match schema::create_schema(conn.clone()).await {
         Ok(_) => {
             println!("schema created.");
@@ -61,6 +61,21 @@ async fn main() {
             return;
         }
     }
+
+    match initialize::initialize(conn.clone()).await {
+        Ok(_) => {
+            println!("initialized.");
+        },
+        Err(e) => {
+            eprintln!("initialize error!");
+            eprintln!("{}", e);
+            return;
+        }
+    }
+
+    let v1_api_router = Router::new()
+        .nest("/workspaces", controller::workspaces::router(conn.clone()))
+        .nest("/images", controller::images::router(conn.clone()));
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", controller::workspaces::ApiDoc::openapi()))
         .nest("/api/v1", v1_api_router)

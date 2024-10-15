@@ -8,66 +8,36 @@ use axum::{
     Json,
     Router,
 };
-use serde::de::DeserializeOwned;
 use serde::{Serialize, Deserialize};
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-use utoipa::ToSchema;
 use utoipa::OpenApi;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
+use crate::model::config::Config;
+use crate::model::workspace_info::WorkspaceInfo;
 
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
-#[allow(dead_code)]
-trait JsonModel: Sized + DeserializeOwned + Serialize {
-    fn file_path(&self) -> String;
+//trait JsonModel: Sized + DeserializeOwned + Serialize {
+    //fn file_path(&self) -> String;
 
-    async fn save(&self) -> Result<(), std::io::Error> {
-        let json = serde_json::to_string_pretty(&self).unwrap();
-        let mut file = File::create(self.file_path()).await?;
-        file.write_all(json.as_bytes()).await?;
-        Ok(())
-    }
+    //async fn save(&self) -> Result<(), std::io::Error> {
+        //let json = serde_json::to_string_pretty(&self).unwrap();
+        //let mut file = File::create(self.file_path()).await?;
+        //file.write_all(json.as_bytes()).await?;
+        //Ok(())
+    //}
 
-    fn new(file_path: &str) -> Result<Self, std::io::Error> {
-        let json_file = std::fs::File::open(file_path).unwrap();
-        let reader = std::io::BufReader::new(json_file);
-        let config = serde_json::from_reader(reader).unwrap();
-        Ok(config)
-    }
-}
+    //fn new(file_path: &str) -> Result<Self, std::io::Error> {
+        //let json_file = std::fs::File::open(file_path).unwrap();
+        //let reader = std::io::BufReader::new(json_file);
+        //let config = serde_json::from_reader(reader).unwrap();
+        //Ok(config)
+    //}
+//}
 
-#[derive(Serialize, Deserialize, ToSchema)]
-struct WorkspaceInfo {
-    #[schema(example = r"C:\Users\user\workspace")]
-    path: String,
 
-    #[schema(example = "a0b257bb-b7c6-46f3-b27c-31f8ce1c3703")]
-    workspace_id: String,
-
-    #[schema(example = "ワークスペース名")]
-    name: String,
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-struct Config {
-    workspace_list: Vec<WorkspaceInfo>,
-}
-
-impl Config {
-    const FILE_PATH: &'static str = "./config.json";
-
-    fn new() -> Result<Self, std::io::Error> {
-        let json_file = std::fs::File::open(Self::FILE_PATH).unwrap();
-        let reader = std::io::BufReader::new(json_file);
-        let config = serde_json::from_reader(reader).unwrap();
-        Ok(config)
-    }
-
-}
 
 #[derive(Serialize)]
 struct LoginInfo {
@@ -79,11 +49,11 @@ struct BasicApiError {
     error_message: String,
 }
 
-impl JsonModel for Config {
-    fn file_path(&self) -> String {
-        Self::FILE_PATH.to_string()
-    }
-}
+//impl JsonModel for Config {
+    //fn file_path(&self) -> String {
+        //Self::FILE_PATH.to_string()
+    //}
+//}
 
 
 #[derive(Deserialize)]

@@ -7,6 +7,17 @@ use axum::{
 use rusqlite::{Connection, params};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use base64::prelude::*;
+
+fn decode_str(auth_header: &str) -> Option<String> {
+    let bytes = BASE64_STANDARD.decode(auth_header).ok()?;
+    let s = match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
+
+    Some(s)
+}
 
 pub async fn auth(
     State(conn): State<Arc<Mutex<Connection>>>,
@@ -28,7 +39,12 @@ pub async fn auth(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let v: Vec<&str> = auth_header_str[prefix.len()..].split(':').collect();
+    let decoded_payload = match decode_str(&auth_header_str[prefix.len()..]) {
+        Some(s) => s,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    let v: Vec<&str> = decoded_payload.split(':').collect();
     if v.len() != 2 {
         return Err(StatusCode::UNAUTHORIZED);
     }
