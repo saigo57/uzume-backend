@@ -39,12 +39,12 @@ use crate::model::workspace_info::WorkspaceInfo;
 
 
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct LoginInfo {
     access_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct BasicApiError {
     error_message: String,
 }
@@ -144,4 +144,24 @@ pub fn router(conn: Arc<Mutex<Connection>>) -> Router {
     Router::new()
         .nest("/", noauth_endpoints)
         .nest("/", auth_endpoints)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::create_schema;
+
+    #[tokio::test]
+    async fn test_post_login_workspace() {
+        let conn = Connection::open_in_memory().unwrap();
+        let conn = Arc::new(Mutex::new(conn));
+        create_schema(conn.clone()).await.unwrap();
+
+        let body = Json(LoginWorkspaceParams { workspace_id: "test_workspace_id".to_string() });
+        let (status, result) = login_workspace(Extension(conn.clone()), body).await;
+        print!("status: {:?}, result: {:?}", status, result);
+        assert_eq!(status, StatusCode::OK);
+        let result = result.unwrap();
+        assert_eq!(result.0.access_token.len(), 36);
+    }
 }
