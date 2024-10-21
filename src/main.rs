@@ -16,7 +16,6 @@ mod model;
 
 const DEFAULT_PORT: u16 = 22113;
 
-
 fn parse_args(args: &[String]) -> Result<u16, String> {
     if args.len() == 1 {
         return Ok(DEFAULT_PORT);
@@ -32,8 +31,6 @@ fn parse_args(args: &[String]) -> Result<u16, String> {
 
     Err(format!("invalid arg num: {}", args.len()))
 }
-
-
 
 #[tokio::main]
 async fn main() {
@@ -84,4 +81,35 @@ async fn main() {
         .layer(Extension(conn));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_args_param_is_none() {
+        let args = vec!["this_app".to_string()];
+        assert_eq!(parse_args(&args), Ok(DEFAULT_PORT));
+    }
+
+    #[test]
+    fn test_parse_args_param_with_port() {
+        let port = 12345;
+        let args = vec!["this_app".to_string(), port.to_string()];
+        assert_ne!(DEFAULT_PORT, port);
+        assert_eq!(parse_args(&args), Ok(port));
+    }
+
+    #[test]
+    fn test_parse_args_param_with_port_that_not_number() {
+        let args = vec!["this_app".to_string(), "not_number".to_string()];
+        assert_eq!(parse_args(&args), Err("invalid port: not_number".to_string()));
+    }
+
+    #[test]
+    fn test_parse_args_when_invalid_args_num() {
+        let args = vec!["this_app".to_string(), "12345".to_string(), "invalid_args".to_string()];
+        assert_eq!(parse_args(&args), Err("invalid arg num: 3".to_string()));
+    }
 }
