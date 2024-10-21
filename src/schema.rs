@@ -25,6 +25,17 @@ pub async fn create_schema(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE tag (
+            workspace_id TEXT,
+            tag_id TEXT,
+            name TEXT,
+            favorite INTEGER,
+            tag_group_id TEXT
+        )",
+        [],
+    )?;
+
     // for debug
     conn.execute(
         "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",

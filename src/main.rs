@@ -75,7 +75,8 @@ async fn main() {
 
     let v1_api_router = Router::new()
         .nest("/workspaces", controller::workspaces::router(conn.clone()))
-        .nest("/images", controller::images::router(conn.clone()));
+        .nest("/images", controller::images::router(conn.clone()))
+        .nest("/tags", controller::tags::router(conn.clone()));
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", controller::workspaces::ApiDoc::openapi()))
         .nest("/api/v1", v1_api_router)

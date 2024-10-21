@@ -6,11 +6,13 @@ use std::fs;
 use tokio::sync::Mutex;
 use crate::model::config::Config;
 use crate::model::image_info::ImageInfo;
+use crate::model::tags::Tags;
 
 pub async fn initialize(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
     let conn = conn.lock().await;
     let config = Config::new().unwrap();
     load_image_info(&conn, &config).await?;
+    load_tags(&conn, &config).await?;
     Ok(())
 }
 
@@ -37,6 +39,26 @@ async fn load_image_info(conn: &Connection, config: &Config) -> Result<(), Error
                     image_info.width.to_string(),
                     image_info.height.to_string(),
                     image_info.created_at,
+                ],
+            ).unwrap();
+        }
+    }
+
+    Ok(())
+}
+
+async fn load_tags(conn: &Connection, config: &Config) -> Result<(), Error> {
+    for workspace in &config.workspace_list {
+        let tags = Tags::load(workspace).unwrap();
+        for tag in tags.tags {
+            conn.execute(
+                "INSERT INTO tag (workspace_id, tag_id, name, favorite, tag_group_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+                [
+                    workspace.workspace_id.clone(),
+                    tag.tag_id,
+                    tag.name,
+                    (if tag.favorite { 1 } else { 0 }).to_string(),
+                    tag.tag_group_id,
                 ],
             ).unwrap();
         }
