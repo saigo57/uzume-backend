@@ -4,19 +4,19 @@ use std::path::Path;
 use std::sync::Arc;
 use std::fs;
 use tokio::sync::Mutex;
-use crate::model::config::Config;
-use crate::model::image_info::ImageInfo;
+use crate::model::file::config::Config as FileConfig;
+use crate::model::file::image_info::ImageInfo as FileImageInfo;
 use crate::model::tags::Tags;
 
 pub async fn initialize(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
     let conn = conn.lock().await;
-    let config = Config::new().unwrap();
+    let config = FileConfig::new().unwrap();
     load_image_info(&conn, &config).await?;
     load_tags(&conn, &config).await?;
     Ok(())
 }
 
-async fn load_image_info(conn: &Connection, config: &Config) -> Result<(), Error> {
+async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), Error> {
     for workspace in &config.workspace_list {
         let workspace_path = workspace.clone().path.clone();
         let workspace_path = Path::new(&workspace_path);
@@ -27,7 +27,7 @@ async fn load_image_info(conn: &Connection, config: &Config) -> Result<(), Error
             let entry = entry.unwrap();
             let image_dir_name = entry.file_name();
             let image_info_file_path = images_path.join(image_dir_name).join("imageinfo.json");
-            let image_info = ImageInfo::load(image_info_file_path.to_str().unwrap()).unwrap();
+            let image_info = FileImageInfo::load(image_info_file_path.to_str().unwrap()).unwrap();
 
             conn.execute(
                 "INSERT INTO image (workspace_id, image_id, file_name, ext, width, height, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -47,7 +47,7 @@ async fn load_image_info(conn: &Connection, config: &Config) -> Result<(), Error
     Ok(())
 }
 
-async fn load_tags(conn: &Connection, config: &Config) -> Result<(), Error> {
+async fn load_tags(conn: &Connection, config: &FileConfig) -> Result<(), Error> {
     for workspace in &config.workspace_list {
         let tags = Tags::load(workspace).unwrap();
         for tag in tags.tags {

@@ -1,7 +1,7 @@
 use utoipa::ToSchema;
 use std::path::Path;
 use crate::model::tag::Tag;
-use crate::model::workspace_info::WorkspaceInfo;
+use crate::model::file::workspace_info::WorkspaceInfo;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, ToSchema)]

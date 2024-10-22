@@ -1,5 +1,5 @@
 use utoipa::ToSchema;
-use crate::model::workspace_info::WorkspaceInfo;
+use crate::model::file::workspace_info::WorkspaceInfo;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, ToSchema)]

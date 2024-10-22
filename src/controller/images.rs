@@ -10,11 +10,11 @@ use axum::{
 };
 use serde::{Serialize, Deserialize};
 use utoipa::ToSchema;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
-use crate::model::image_info::ImageInfo;
+use crate::model::db::image_info::ImageInfo as DBImageInfo;
 
 #[derive(Serialize, Deserialize, ToSchema)]
 struct GetImageParams {
@@ -24,7 +24,7 @@ struct GetImageParams {
 #[derive(Serialize, Deserialize, ToSchema)]
 struct ImagesResponse {
     page: u32,
-    images: Vec<ImageInfo>,
+    images: Vec<DBImageInfo>,
 }
 
 #[utoipa::path(
@@ -43,18 +43,7 @@ async fn get_images(
     // queryを解釈してpage変数を新しく作る。どこかで値がなかった場合は1を入れる
     let page = query.page.unwrap_or(1);
     let page = max(1, page); // pageは1以上
-    let mut stmt = conn.prepare("SELECT workspace_id, image_id, file_name, ext, width, height, created_at FROM image WHERE workspace_id = ?1 LIMIT 100 OFFSET ?2").unwrap();
-    let images: Vec::<ImageInfo> = stmt.query_map(params![workspace_id, 100 * (page - 1)], |row| {
-        Ok(ImageInfo {
-            image_id: row.get(1)?,
-            file_name: row.get(2)?,
-            ext: row.get(3)?,
-            width: row.get(4)?,
-            height: row.get(5)?,
-            created_at: row.get(6)?,
-            tags: vec![],
-        })
-    }).unwrap().map(|r| r.unwrap()).collect();
+    let images = DBImageInfo::get(&conn, workspace_id.clone(), page).unwrap();
     let ir = ImagesResponse {
         page,
         images,

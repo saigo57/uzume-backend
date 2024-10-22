@@ -14,8 +14,8 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
-use crate::model::config::Config;
-use crate::model::workspace_info::WorkspaceInfo;
+use crate::model::file::config::Config;
+use crate::model::file::workspace_info::WorkspaceInfo;
 
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
@@ -40,7 +40,7 @@ use crate::model::workspace_info::WorkspaceInfo;
 
 
 #[derive(Debug, Serialize)]
-struct LoginInfo {
+struct LoginInfoResponse {
     access_token: String,
 }
 
@@ -100,7 +100,7 @@ async fn patch_workspaces(
 async fn login_workspace(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Json(body): Json<LoginWorkspaceParams>,
-) -> (StatusCode, Result<Json<LoginInfo>, Json<BasicApiError>>) {
+) -> (StatusCode, Result<Json<LoginInfoResponse>, Json<BasicApiError>>) {
     let conn = conn.lock().await;
     let access_token = Uuid::new_v4().to_string();
     match conn.execute(
@@ -116,7 +116,7 @@ async fn login_workspace(
         }
     }
 
-    (StatusCode::OK, Ok(Json(LoginInfo { access_token })))
+    (StatusCode::OK, Ok(Json(LoginInfoResponse { access_token })))
 }
 
 #[derive(OpenApi)]
