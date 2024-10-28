@@ -4,10 +4,11 @@ use axum::{
     extract::{Request, State},
     middleware::Next,
 };
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use base64::prelude::*;
+use crate::model::db::auth::Auth as DBAuth;
 
 fn decode_str(auth_header: &str) -> Option<String> {
     let bytes = BASE64_STANDARD.decode(auth_header).ok()?;
@@ -55,15 +56,13 @@ pub async fn auth(
     {
         // このconnのスコープを早めに閉じないと、next.runでロックが解除されないなどの影響？でビルドエラーになる
         let conn = conn.lock().await;
-        let mut stmt = conn.prepare("SELECT 1 FROM auth WHERE workspace_id = ?1 AND access_token = ?2").unwrap();
-        
-        let rows = stmt.query_map(params![workspace_id, access_token], |_row| {
-            Ok(1)
-        }).unwrap();
-
-        // 上の組み合わせが見つからなかったら認証エラー
-        if rows.count() == 0 {
-            return Err(StatusCode::UNAUTHORIZED);
+        match DBAuth::is_authed(&conn, workspace_id.to_string(), access_token.to_string()) {
+            Ok(is_authed) => {
+                if !is_authed {
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
+            },
+            Err(_) => return Err(StatusCode::UNAUTHORIZED),
         }
     }
 

@@ -1,5 +1,4 @@
 
-use uuid::Uuid;
 use axum::{
     self,
     routing::{get, post, patch},
@@ -16,6 +15,7 @@ use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
 use crate::model::file::config::Config;
 use crate::model::file::workspace_info::WorkspaceInfo;
+use crate::model::db::auth::Auth as DBAuth;
 
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
@@ -102,11 +102,8 @@ async fn login_workspace(
     Json(body): Json<LoginWorkspaceParams>,
 ) -> (StatusCode, Result<Json<LoginInfoResponse>, Json<BasicApiError>>) {
     let conn = conn.lock().await;
-    let access_token = Uuid::new_v4().to_string();
-    match conn.execute(
-        "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
-        [access_token.clone(), body.workspace_id],
-    ) {
+    let auth = DBAuth::generate(body.workspace_id.clone());
+    match auth.save(&conn) {
         Ok(_) => {},
         Err(err) => {
             return (
@@ -116,7 +113,7 @@ async fn login_workspace(
         }
     }
 
-    (StatusCode::OK, Ok(Json(LoginInfoResponse { access_token })))
+    (StatusCode::OK, Ok(Json(LoginInfoResponse { access_token: auth.access_token })))
 }
 
 #[derive(OpenApi)]
