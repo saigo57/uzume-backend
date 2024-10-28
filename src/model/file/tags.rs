@@ -1,6 +1,6 @@
 use utoipa::ToSchema;
 use std::path::Path;
-use crate::model::tag::Tag;
+use crate::model::file::tag::Tag;
 use crate::model::file::workspace_info::WorkspaceInfo;
 use serde::{Serialize, Deserialize};
 

@@ -6,7 +6,7 @@ use std::fs;
 use tokio::sync::Mutex;
 use crate::model::file::config::Config as FileConfig;
 use crate::model::file::image_info::ImageInfo as FileImageInfo;
-use crate::model::tags::Tags;
+use crate::model::file::tags::Tags as FileTags;
 
 pub async fn initialize(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
     let conn = conn.lock().await;
@@ -49,7 +49,7 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), E
 
 async fn load_tags(conn: &Connection, config: &FileConfig) -> Result<(), Error> {
     for workspace in &config.workspace_list {
-        let tags = Tags::load(workspace).unwrap();
+        let tags = FileTags::load(workspace).unwrap();
         for tag in tags.tags {
             conn.execute(
                 "INSERT INTO tag (workspace_id, tag_id, name, favorite, tag_group_id) VALUES (?1, ?2, ?3, ?4, ?5)",

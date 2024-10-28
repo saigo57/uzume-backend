@@ -9,15 +9,15 @@ use axum::{
 };
 use serde::{Serialize, Deserialize};
 use utoipa::ToSchema;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
-use crate::model::tag::Tag;
+use crate::model::db::tag::Tag as DBTag;
 
 #[derive(Serialize, Deserialize, ToSchema)]
 struct TagsResponse {
-    tags: Vec<Tag>,
+    tags: Vec<DBTag>,
 }
 
 #[utoipa::path(
@@ -32,16 +32,7 @@ async fn get_tags(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
 ) -> (StatusCode, Json<TagsResponse>) {
     let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT tag_id, name, favorite, tag_group_id FROM tag WHERE workspace_id = ?1").unwrap();
-    let tags: Vec::<Tag> = stmt.query_map(params![workspace_id], |row| {
-        let favorite: i32 = row.get(2)?;
-        Ok(Tag {
-            tag_id: row.get(0)?,
-            name: row.get(1)?,
-            favorite: favorite != 0,
-            tag_group_id: row.get(3)?,
-        })
-    }).unwrap().map(|r| r.unwrap()).collect();
+    let tags = DBTag::get(&conn, workspace_id.clone()).unwrap();
     let tr = TagsResponse {
         tags,
     };
