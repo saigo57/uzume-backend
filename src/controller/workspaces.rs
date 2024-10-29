@@ -16,6 +16,7 @@ use crate::controller::middleware::auth;
 use crate::model::file::config::Config;
 use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::db::auth::Auth as DBAuth;
+use crate::util::BasicApiError;
 
 // TODO: unwrap周りと適切に処理して、model化する
 // TODO: 自動テストを書く
@@ -42,11 +43,6 @@ use crate::model::db::auth::Auth as DBAuth;
 #[derive(Debug, Serialize)]
 struct LoginInfoResponse {
     access_token: String,
-}
-
-#[derive(Debug, Serialize)]
-struct BasicApiError {
-    error_message: String,
 }
 
 //impl JsonModel for Config {

@@ -13,6 +13,7 @@ mod schema;
 mod initialize;
 mod controller;
 mod model;
+mod util;
 
 const DEFAULT_PORT: u16 = 22113;
 

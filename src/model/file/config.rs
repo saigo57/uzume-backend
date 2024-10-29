@@ -16,4 +16,8 @@ impl Config {
         let config = serde_json::from_reader(reader).unwrap();
         Ok(config)
     }
+
+    pub fn find(&self, workspace_id: String) -> Option<&WorkspaceInfo> {
+        self.workspace_list.iter().find(|w| w.workspace_id == workspace_id)
+    }
 }
