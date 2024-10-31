@@ -11,8 +11,24 @@ use crate::model::file::tags::Tags as FileTags;
 pub async fn initialize(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
     let conn = conn.lock().await;
     let config = FileConfig::new().unwrap();
+    load_config(&conn, &config).unwrap();
     load_image_info(&conn, &config).await?;
     load_tags(&conn, &config).await?;
+    Ok(())
+}
+
+fn load_config(conn: &Connection, config: &FileConfig) -> Result<(), Error> {
+    for workspace in &config.workspace_list {
+        conn.execute(
+            "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
+            [
+                workspace.path.clone(),
+                workspace.workspace_id.clone(),
+                workspace.name.clone(),
+            ],
+        ).unwrap();
+    }
+
     Ok(())
 }
 

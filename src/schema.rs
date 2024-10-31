@@ -13,6 +13,15 @@ pub async fn create_schema(conn: Arc<Mutex<Connection>>) -> Result<(), Error> {
     )?;
 
     conn.execute(
+        "CREATE TABLE config (
+            path TEXT,
+            workspace_id TEXT,
+            name TEXT
+        )",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE TABLE image (
             workspace_id TEXT,
             image_id TEXT,

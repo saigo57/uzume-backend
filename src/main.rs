@@ -8,6 +8,7 @@ use utoipa::OpenApi;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::model::file::writer::FileWriter;
 
 mod schema;
 mod initialize;
@@ -71,15 +72,17 @@ async fn main() {
         }
     }
 
+    let writer = FileWriter;
     let v1_api_router = Router::new()
         .nest("/workspaces", controller::workspaces::router(conn.clone()))
         .nest("/images", controller::images::router(conn.clone()))
-        .nest("/tags", controller::tags::router(conn.clone()));
+        .nest("/tags", controller::tags::router::<FileWriter>(conn.clone()));
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", controller::workspaces::ApiDoc::openapi()))
         .nest("/api/v1", v1_api_router)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-        .layer(Extension(conn));
+        .layer(Extension(conn))
+        .layer(Extension(writer));
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
