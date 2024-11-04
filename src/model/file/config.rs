@@ -1,8 +1,7 @@
-use utoipa::ToSchema;
 use crate::model::file::workspace_info::WorkspaceInfo;
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     pub workspace_list: Vec<WorkspaceInfo>,
 }

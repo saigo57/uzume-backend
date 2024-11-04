@@ -1,14 +1,11 @@
-use utoipa::ToSchema;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use rusqlite::{Connection, params};
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 pub struct Auth {
-    #[schema(example = "e3e2ffc1-bee4-401d-a71a-f42faa150c04")]
     pub access_token: String,
 
-    #[schema(example = "e3e2ffc1-bee4-401d-a71a-f42faa150c04")]
     pub workspace_id: String,
 }
 

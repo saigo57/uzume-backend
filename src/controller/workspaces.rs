@@ -1,4 +1,3 @@
-
 use axum::{
     self,
     routing::{get, post, patch},
@@ -8,22 +7,22 @@ use axum::{
     Router,
 };
 use serde::{Serialize, Deserialize};
-use utoipa::OpenApi;
+use utoipa::{OpenApi, ToSchema, IntoParams};
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
-use crate::model::file::config::Config;
-use crate::model::file::workspace_info::WorkspaceInfo;
+use crate::model::file::config::Config as FileConfig;
+use crate::model::db::config::Config as DBConfig;
 use crate::model::db::auth::Auth as DBAuth;
 use crate::util::{ApiResponse, BasicApiError};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct LoginInfoResponse {
     access_token: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema, IntoParams)]
 struct LoginWorkspaceParams {
     workspace_id: String,
 }
@@ -35,8 +34,8 @@ struct LoginWorkspaceParams {
         (status = 200, description = "All workspaces", body = Config)
     )
 )]
-async fn get_workspaces() -> (StatusCode, ApiResponse<Config>) {
-    let config = match Config::new() {
+async fn get_workspaces() -> (StatusCode, ApiResponse<FileConfig>) {
+    let config = match FileConfig::new() {
         Ok(config) => config,
         Err(err) => {
             return (
@@ -57,9 +56,9 @@ async fn get_workspaces() -> (StatusCode, ApiResponse<Config>) {
 )]
 async fn patch_workspaces(
     Extension(workspace_id): Extension<String>,
-) -> (StatusCode, ApiResponse<Config>) {
+) -> (StatusCode, ApiResponse<FileConfig>) {
     println!("workspace_id: {}", workspace_id);
-    let config = match Config::new() {
+    let config = match FileConfig::new() {
         Ok(config) => config,
         Err(err) => {
             return (
@@ -74,8 +73,9 @@ async fn patch_workspaces(
 #[utoipa::path(
     post,
     path = "/api/v1/workspaces/login",
+    params(LoginWorkspaceParams),
     responses(
-        (status = 200, description = "Login success", body = LoginInfo),
+        (status = 200, description = "Login success", body = LoginInfoResponse),
         (status = 400, description = "Login failed", body = BasicApiError),
     )
 )]
@@ -84,6 +84,23 @@ async fn login_workspace(
     Json(body): Json<LoginWorkspaceParams>,
 ) -> (StatusCode, ApiResponse<LoginInfoResponse>) {
     let conn = conn.lock().await;
+    
+    match DBConfig::find(&conn, body.workspace_id.clone()) {
+        Ok(Some(_)) => {},
+        Ok(None) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Err(Json(BasicApiError { error_message: "Workspace not found".to_string() }))
+            );
+        },
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+
     let auth = DBAuth::generate(body.workspace_id.clone());
     match auth.save(&conn) {
         Ok(_) => {},
@@ -101,12 +118,13 @@ async fn login_workspace(
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        get_workspaces,
+        login_workspace,
     ),
     components(
         schemas(
-            Config,
-            WorkspaceInfo,
+            LoginWorkspaceParams,
+            LoginInfoResponse,
+            BasicApiError,
         ),
     ),
 )]
@@ -128,19 +146,31 @@ pub fn router(conn: Arc<Mutex<Connection>>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::create_schema;
+    use crate::test_util::TestUtil;
+    
+    mod test_login_workspace {
+        use super::*;
 
-    #[tokio::test]
-    async fn test_post_login_workspace() {
-        let conn = Connection::open_in_memory().unwrap();
-        let conn = Arc::new(Mutex::new(conn));
-        create_schema(conn.clone()).await.unwrap();
+        #[tokio::test]
+        async fn test_success() {
+            let tu = TestUtil::new().await;
 
-        let body = Json(LoginWorkspaceParams { workspace_id: "test_workspace_id".to_string() });
-        let (status, result) = login_workspace(Extension(conn.clone()), body).await;
-        print!("status: {:?}, result: {:?}", status, result);
-        assert_eq!(status, StatusCode::OK);
-        let result = result.unwrap();
-        assert_eq!(result.0.access_token.len(), 36);
+            let body = Json(LoginWorkspaceParams { workspace_id: tu.workspace_id.clone() });
+            let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
+            print!("status: {:?}, result: {:?}", status, result);
+            assert_eq!(status, StatusCode::OK);
+            let result = result.unwrap();
+            assert_eq!(result.0.access_token.len(), 36);
+        }
+
+        #[tokio::test]
+        async fn test_fail() {
+            let tu = TestUtil::new().await;
+
+            let body = Json(LoginWorkspaceParams { workspace_id: "invalid_workspace_id".to_string() });
+            let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
+            print!("status: {:?}, result: {:?}", status, result);
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
     }
 }

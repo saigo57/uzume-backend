@@ -1,17 +1,13 @@
-use utoipa::ToSchema;
 use serde::{Serialize, Deserialize};
 use rusqlite::{Connection, params};
 use crate::model::file::workspace_info::WorkspaceInfo;
 
-#[derive(Serialize, Deserialize, ToSchema, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    #[schema(example = "e3e2ffc1-bee4-401d-a71a-f42faa150c04")]
     pub path: String,
 
-    #[schema(example = "e3e2ffc1-bee4-401d-a71a-f42faa150c04")]
     pub workspace_id: String,
 
-    #[schema(example = "e3e2ffc1-bee4-401d-a71a-f42faa150c04")]
     pub name: String,
 }
 

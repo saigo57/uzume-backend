@@ -9,7 +9,6 @@ use axum::{
     Router,
 };
 use serde::{Serialize, Deserialize};
-use utoipa::ToSchema;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -17,12 +16,12 @@ use crate::controller::middleware::auth;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::util::{ApiResponse, BasicApiError};
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 struct GetImageParams {
     page: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 struct ImagesResponse {
     page: u32,
     images: Vec<DBImageInfo>,

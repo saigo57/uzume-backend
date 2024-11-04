@@ -1,4 +1,3 @@
-use utoipa::ToSchema;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 use crate::model::file::tag::Tag;
@@ -6,7 +5,7 @@ use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::db::tag::Tag as DBTag;
 use crate::model::file::writer::Writer;
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 pub struct Tags {
     pub tags: Vec<Tag>,
 }

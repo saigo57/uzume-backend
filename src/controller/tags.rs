@@ -7,7 +7,6 @@ use axum::{
     Router,
 };
 use serde::{Serialize, Deserialize};
-use utoipa::ToSchema;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -18,7 +17,7 @@ use crate::model::file::writer::Writer;
 use crate::model::db::tag::Tag as DBTag;
 use crate::util::{ApiResponse, BasicApiError};
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize)]
 struct TagsResponse {
     tags: Vec<DBTag>,
 }
