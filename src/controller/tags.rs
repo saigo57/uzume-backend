@@ -98,47 +98,26 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::create_schema;
-    use crate::model::file::writer::MockWriter;
+    use std::path::Path;
+    use crate::test_util::TestUtil;
 
     #[tokio::test]
     async fn test_post_tags() {
-        let writer = MockWriter{data: Arc::new(std::sync::Mutex::new(None))};
-        let conn = Connection::open_in_memory().unwrap();
-        let conn = Arc::new(Mutex::new(conn));
-        create_schema(conn.clone()).await.unwrap();
-
-
-        let test_access_token = "test-access-token";
-        let workspace_id = "12345678-xxxx-yyyy-zzzz-000000000000";
-        let workspace_path = "/path/to/test.uzume";
-
-        {
-            let conn = conn.lock().await;
-            conn.execute(
-                "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
-                [test_access_token, workspace_id],
-            ).unwrap();
-
-            conn.execute(
-                "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
-                [workspace_path, workspace_id, "test_workspace"],
-            ).unwrap();
-        }
+        let tu = TestUtil::new().await;
+        let workspace_path = Path::new(&tu.workspace_path);
 
         let body = Json(TagParams { name: "new_tag".to_string() });
         let (status, _result) = post_tags(
-            Extension(workspace_id.to_string()),
-            Extension(conn.clone()),
-            Extension(writer.clone()),
+            Extension(tu.workspace_id.to_string()),
+            Extension(tu.conn.clone()),
+            Extension(tu.writer.clone()),
             body
         ).await;
-
         assert_eq!(status, StatusCode::CREATED);
 
-        assert_eq!(writer.get_path(), "/path/to/test.uzume/tags.json");
+        assert_eq!(tu.writer.get_path(), workspace_path.join("tags.json").to_str().unwrap());
 
-        let tags: FileTags = serde_json::from_str(&writer.get_json()).unwrap();
+        let tags: FileTags = serde_json::from_str(&tu.writer.get_json()).unwrap();
         assert_eq!(tags.tags.len(), 1);
 
         let tag = tags.tags.first().unwrap();
