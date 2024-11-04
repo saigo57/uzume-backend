@@ -35,4 +35,14 @@ impl Auth {
         )?;
         Ok(())
     }
+
+    #[allow(dead_code)] // テスト用コード
+    pub fn count(conn: &Connection, workspace_id: String) -> Result<usize, rusqlite::Error> {
+        let mut stmt = conn.prepare("SELECT 1 FROM auth WHERE workspace_id = ?1")?;
+        let rows = stmt.query_map(params![workspace_id], |_row| {
+            Ok(1)
+        })?;
+
+        Ok(rows.count())
+    }
 }

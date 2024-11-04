@@ -154,6 +154,11 @@ mod tests {
         #[tokio::test]
         async fn test_success() {
             let tu = TestUtil::new().await;
+            
+            {
+                let conn = tu.conn.lock().await;
+                assert_eq!(DBAuth::count(&conn, tu.workspace_id.clone()).unwrap(), 1);
+            }
 
             let body = Json(LoginWorkspaceParams { workspace_id: tu.workspace_id.clone() });
             let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
@@ -161,16 +166,31 @@ mod tests {
             assert_eq!(status, StatusCode::OK);
             let result = result.unwrap();
             assert_eq!(result.0.access_token.len(), 36);
+
+            {
+                let conn = tu.conn.lock().await;
+                assert_eq!(DBAuth::count(&conn, tu.workspace_id.clone()).unwrap(), 2);
+            }
         }
 
         #[tokio::test]
         async fn test_fail() {
             let tu = TestUtil::new().await;
 
+            {
+                let conn = tu.conn.lock().await;
+                assert_eq!(DBAuth::count(&conn, tu.workspace_id.clone()).unwrap(), 1);
+            }
+
             let body = Json(LoginWorkspaceParams { workspace_id: "invalid_workspace_id".to_string() });
             let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
             print!("status: {:?}, result: {:?}", status, result);
             assert_eq!(status, StatusCode::BAD_REQUEST);
+
+            {
+                let conn = tu.conn.lock().await;
+                assert_eq!(DBAuth::count(&conn, tu.workspace_id.clone()).unwrap(), 1);
+            }
         }
     }
 }
