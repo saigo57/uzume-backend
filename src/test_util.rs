@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 use crate::schema::create_schema;
 use crate::model::file::writer::MockWriter;
 
+#[allow(dead_code)] // テスト用コード
 pub struct TestUtil {
     pub conn: Arc<Mutex<Connection>>,
     pub writer: MockWriter,
@@ -12,6 +13,7 @@ pub struct TestUtil {
     pub test_access_token: String,
 }
 
+#[allow(dead_code)] // テスト用コード
 impl TestUtil {
     pub async fn new() -> Self {
         let writer = MockWriter{data: Arc::new(std::sync::Mutex::new(None))};
