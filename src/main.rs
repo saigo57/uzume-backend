@@ -49,7 +49,14 @@ async fn main() {
 
     println!("port: {}", port);
 
-    let conn = Connection::open_in_memory().unwrap();
+    let conn = match Connection::open_in_memory() {
+        Ok(conn) => conn,
+        Err(e) => {
+            eprintln!("connection open error!");
+            eprintln!("{}", e);
+            return;
+        }
+    };
     let conn = Arc::new(Mutex::new(conn));
     match schema::create_schema(conn.clone()).await {
         Ok(_) => {
@@ -84,8 +91,22 @@ async fn main() {
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(Extension(conn))
         .layer(Extension(writer));
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("listener bind error!");
+            eprintln!("{}", e);
+            return;
+        }
+    };
+    match axum::serve(listener, app).await {
+        Ok(_) => {},
+        Err(e) => {
+            eprintln!("serve error!");
+            eprintln!("{}", e);
+            return;
+        }
+    };
 }
 
 #[cfg(test)]

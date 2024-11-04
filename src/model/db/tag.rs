@@ -1,3 +1,4 @@
+use std::error::Error;
 use utoipa::ToSchema;
 use serde::{Serialize, Deserialize};
 use rusqlite::{params, Connection};
@@ -21,7 +22,7 @@ pub struct Tag {
 }
 
 impl Tag {
-    pub fn get_all(conn: &Connection, workspace_id: String) -> Result<Vec<Self>, std::io::Error> {
+    pub fn get_all(conn: &Connection, workspace_id: String) -> Result<Vec<Self>, Box<dyn Error>> {
         let mut stmt = conn.prepare("
             SELECT
                 workspace_id
@@ -31,7 +32,7 @@ impl Tag {
                 ,tag_group_id
             FROM tag
             WHERE workspace_id = ?1
-        ").unwrap();
+        ")?;
         let tags: Vec::<Tag> = stmt.query_map(params![workspace_id], |row| {
             let favorite: i32 = row.get(3)?;
             Ok(Tag {
@@ -41,11 +42,11 @@ impl Tag {
                 favorite: favorite != 0,
                 tag_group_id: row.get(4)?,
             })
-        }).unwrap().map(|r| r.unwrap()).collect();
+        })?.collect::<Result<Vec<_>, _>>()?;
         Ok(tags)
     }
 
-    pub fn create(conn: &Connection, workspace_id: String, name: String) -> Result<Self, std::io::Error> {
+    pub fn create(conn: &Connection, workspace_id: String, name: String) -> Result<Self, Box<dyn Error>> {
         let tag = Self {
             workspace_id,
             tag_id: uuid::Uuid::new_v4().to_string(),
@@ -53,11 +54,11 @@ impl Tag {
             favorite: false,
             tag_group_id: "".to_string(),
         };
-        tag.save(conn).unwrap();
+        tag.save(conn)?;
         Ok(tag)
     }
 
-    pub fn save(&self, conn: &Connection) -> Result<(), std::io::Error> {
+    pub fn save(&self, conn: &Connection) -> Result<(), Box<dyn Error>> {
         conn.execute("
             INSERT INTO tag (
                 workspace_id
@@ -72,7 +73,7 @@ impl Tag {
             self.name,
             if self.favorite { 1 } else { 0 },
             self.tag_group_id,
-        ]).unwrap();
+        ])?;
         Ok(())
     }
 }

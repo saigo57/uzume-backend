@@ -17,15 +17,14 @@ pub struct Config {
 
 impl Config {
     pub fn find(conn: &Connection, workspace_id: String) -> Result<Option<WorkspaceInfo>, rusqlite::Error> {
-        let mut stmt = conn.prepare("SELECT path, workspace_id, name FROM config WHERE workspace_id = ?1").unwrap();
-        
+        let mut stmt = conn.prepare("SELECT path, workspace_id, name FROM config WHERE workspace_id = ?1")?;
         let workspace_list = stmt.query_map(params![workspace_id], |row| {
             Ok(WorkspaceInfo {
                 path: row.get(0)?,
                 workspace_id: row.get(1)?,
                 name: row.get(2)?,
             })
-        }).unwrap().map(|r| r.unwrap()).collect::<Vec<WorkspaceInfo>>();
+        })?.collect::<Result<Vec<_>, _>>()?;
 
         if workspace_list.is_empty() {
             return Ok(None)

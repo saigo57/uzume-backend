@@ -16,47 +16,17 @@ use crate::controller::middleware::auth;
 use crate::model::file::config::Config;
 use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::db::auth::Auth as DBAuth;
-use crate::util::BasicApiError;
-
-// TODO: unwrap周りと適切に処理して、model化する
-// TODO: 自動テストを書く
-//trait JsonModel: Sized + DeserializeOwned + Serialize {
-    //fn file_path(&self) -> String;
-
-    //async fn save(&self) -> Result<(), std::io::Error> {
-        //let json = serde_json::to_string_pretty(&self).unwrap();
-        //let mut file = File::create(self.file_path()).await?;
-        //file.write_all(json.as_bytes()).await?;
-        //Ok(())
-    //}
-
-    //fn new(file_path: &str) -> Result<Self, std::io::Error> {
-        //let json_file = std::fs::File::open(file_path).unwrap();
-        //let reader = std::io::BufReader::new(json_file);
-        //let config = serde_json::from_reader(reader).unwrap();
-        //Ok(config)
-    //}
-//}
-
-
+use crate::util::{ApiResponse, BasicApiError};
 
 #[derive(Debug, Serialize)]
 struct LoginInfoResponse {
     access_token: String,
 }
 
-//impl JsonModel for Config {
-    //fn file_path(&self) -> String {
-        //Self::FILE_PATH.to_string()
-    //}
-//}
-
-
 #[derive(Deserialize)]
 struct LoginWorkspaceParams {
     workspace_id: String,
 }
-
 
 #[utoipa::path(
     get,
@@ -65,9 +35,17 @@ struct LoginWorkspaceParams {
         (status = 200, description = "All workspaces", body = Config)
     )
 )]
-async fn get_workspaces() -> (StatusCode, Json<Config>) {
-    let config = Config::new().unwrap();
-    (StatusCode::OK, Json(config))
+async fn get_workspaces() -> (StatusCode, ApiResponse<Config>) {
+    let config = match Config::new() {
+        Ok(config) => config,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+    (StatusCode::OK, Ok(Json(config)))
 }
 
 #[utoipa::path(
@@ -79,10 +57,18 @@ async fn get_workspaces() -> (StatusCode, Json<Config>) {
 )]
 async fn patch_workspaces(
     Extension(workspace_id): Extension<String>,
-) -> (StatusCode, Json<Config>) {
+) -> (StatusCode, ApiResponse<Config>) {
     println!("workspace_id: {}", workspace_id);
-    let config = Config::new().unwrap();
-    (StatusCode::OK, Json(config))
+    let config = match Config::new() {
+        Ok(config) => config,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+    (StatusCode::OK, Ok(Json(config)))
 }
 
 #[utoipa::path(
@@ -96,7 +82,7 @@ async fn patch_workspaces(
 async fn login_workspace(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Json(body): Json<LoginWorkspaceParams>,
-) -> (StatusCode, Result<Json<LoginInfoResponse>, Json<BasicApiError>>) {
+) -> (StatusCode, ApiResponse<LoginInfoResponse>) {
     let conn = conn.lock().await;
     let auth = DBAuth::generate(body.workspace_id.clone());
     match auth.save(&conn) {

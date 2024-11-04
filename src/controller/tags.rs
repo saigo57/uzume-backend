@@ -1,4 +1,3 @@
-
 use axum::{
     self,
     routing::{get, post},
@@ -17,7 +16,7 @@ use crate::model::db::config::Config as DBConfig;
 use crate::model::file::tags::Tags as FileTags;
 use crate::model::file::writer::Writer;
 use crate::model::db::tag::Tag as DBTag;
-use crate::util::BasicApiError;
+use crate::util::{ApiResponse, BasicApiError};
 
 #[derive(Serialize, Deserialize, ToSchema)]
 struct TagsResponse {
@@ -39,13 +38,21 @@ struct TagParams {
 async fn get_tags(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
-) -> (StatusCode, Json<TagsResponse>) {
+) -> (StatusCode, ApiResponse<TagsResponse>) {
     let conn = conn.lock().await;
-    let tags = DBTag::get_all(&conn, workspace_id.clone()).unwrap();
+    let tags = match DBTag::get_all(&conn, workspace_id.clone()) {
+        Ok(tags) => tags,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
     let tr = TagsResponse {
         tags,
     };
-    (StatusCode::OK, Json(tr))
+    (StatusCode::OK, Ok(Json(tr)))
 }
 
 #[utoipa::path(
@@ -60,7 +67,7 @@ async fn post_tags<T: Writer>(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Extension(writer): Extension<T>,
     Json(body): Json<TagParams>,
-) -> (StatusCode, Result<Json<DBTag>, Json<BasicApiError>>) {
+) -> (StatusCode, ApiResponse<DBTag>) {
     let conn = conn.lock().await;
     let tag = match DBTag::create(&conn, workspace_id.clone(), body.name) {
         Ok(tag) => tag,
@@ -72,9 +79,34 @@ async fn post_tags<T: Writer>(
         }
     };
 
-    let workspace = DBConfig::find(&conn, workspace_id.clone()).unwrap().unwrap();
+    let workspace = match DBConfig::find(&conn, workspace_id.clone()) {
+        Ok(workspace) => workspace,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+    let workspace = match workspace {
+        Some(workspace) => workspace,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: format!("workspace({workspace_id}) not found.") }))
+            );
+        }
+    };
 
-    let tags = DBTag::get_all(&conn, workspace_id.clone()).unwrap();
+    let tags = match DBTag::get_all(&conn, workspace_id.clone()) {
+        Ok(tags) => tags,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
     match FileTags::save_from_db(&mut writer.clone() , &workspace, &tags) {
         Ok(_) => {},
         Err(err) => {

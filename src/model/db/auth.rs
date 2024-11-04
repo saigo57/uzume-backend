@@ -22,11 +22,11 @@ impl Auth {
     }
 
     pub fn is_authed(conn: &Connection, workspace_id: String, access_token: String) -> Result<bool, rusqlite::Error> {
-        let mut stmt = conn.prepare("SELECT 1 FROM auth WHERE workspace_id = ?1 AND access_token = ?2").unwrap();
+        let mut stmt = conn.prepare("SELECT 1 FROM auth WHERE workspace_id = ?1 AND access_token = ?2")?;
         
         let rows = stmt.query_map(params![workspace_id, access_token], |_row| {
             Ok(1)
-        }).unwrap();
+        })?;
 
         Ok(rows.count() > 0)
     }

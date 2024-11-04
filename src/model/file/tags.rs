@@ -25,7 +25,7 @@ impl Tags {
             Err(_) => return Ok(Self::new()),
         };
         let reader = std::io::BufReader::new(json_file);
-        let tags = serde_json::from_reader(reader).unwrap();
+        let tags = serde_json::from_reader(reader)?;
         Ok(tags)
     }
 

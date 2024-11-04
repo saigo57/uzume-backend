@@ -11,13 +11,9 @@ impl Config {
     pub const FILE_PATH: &'static str = "./config.json";
 
     pub fn new() -> Result<Self, std::io::Error> {
-        let json_file = std::fs::File::open(Self::FILE_PATH).unwrap();
+        let json_file = std::fs::File::open(Self::FILE_PATH)?;
         let reader = std::io::BufReader::new(json_file);
-        let config = serde_json::from_reader(reader).unwrap();
+        let config = serde_json::from_reader(reader)?;
         Ok(config)
-    }
-
-    pub fn find(&self, workspace_id: String) -> Option<&WorkspaceInfo> {
-        self.workspace_list.iter().find(|w| w.workspace_id == workspace_id)
     }
 }
