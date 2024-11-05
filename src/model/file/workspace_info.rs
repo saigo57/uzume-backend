@@ -1,6 +1,8 @@
+use utoipa::ToSchema;
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[schema(as = FileWorkspaceInfo)]
 pub struct WorkspaceInfo {
     pub path: String,
 

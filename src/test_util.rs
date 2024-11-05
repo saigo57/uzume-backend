@@ -10,6 +10,7 @@ pub struct TestUtil {
     pub writer: MockWriter,
     pub workspace_id: String,
     pub workspace_path: String,
+    pub workspace_name: String,
     pub test_access_token: String,
 }
 
@@ -24,6 +25,7 @@ impl TestUtil {
         let test_access_token = "test-access-token";
         let workspace_id = "12345678-xxxx-yyyy-zzzz-000000000000";
         let workspace_path = "/path/to/test.uzume";
+        let workspace_name = "test workspace";
 
         {
             let conn = conn.lock().await;
@@ -34,7 +36,7 @@ impl TestUtil {
 
             conn.execute(
                 "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
-                [workspace_path, workspace_id, "test_workspace"],
+                [workspace_path, workspace_id, workspace_name],
             ).unwrap();
         }
 
@@ -43,6 +45,7 @@ impl TestUtil {
             writer,
             workspace_id: workspace_id.to_string(),
             workspace_path: workspace_path.to_string(),
+            workspace_name: workspace_name.to_string(),
             test_access_token: test_access_token.to_string(),
         }
     }

@@ -13,9 +13,15 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::controller::middleware::auth;
 use crate::model::file::config::Config as FileConfig;
+use crate::model::file::workspace_info::WorkspaceInfo as FileWorkspaceInfo;
 use crate::model::db::config::Config as DBConfig;
 use crate::model::db::auth::Auth as DBAuth;
 use crate::util::{ApiResponse, BasicApiError};
+
+#[derive(Debug, Serialize, ToSchema)]
+struct WorkspaceResponse {
+    workspace_list: Vec<FileWorkspaceInfo>,
+}
 
 #[derive(Debug, Serialize, ToSchema)]
 struct LoginInfoResponse {
@@ -31,11 +37,15 @@ struct LoginWorkspaceParams {
     get,
     path = "/api/v1/workspaces",
     responses(
-        (status = 200, description = "All workspaces", body = Config)
-    )
+        (status = 200, description = "All workspaces", body = WorkspaceResponse)
+    ),
+    tag="workspace",
 )]
-async fn get_workspaces() -> (StatusCode, ApiResponse<FileConfig>) {
-    let config = match FileConfig::new() {
+async fn get_workspaces(
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+) -> (StatusCode, ApiResponse<WorkspaceResponse>) {
+    let conn = conn.lock().await;
+    let workspaces = match DBConfig::get_workspaces(&conn) {
         Ok(config) => config,
         Err(err) => {
             return (
@@ -44,7 +54,10 @@ async fn get_workspaces() -> (StatusCode, ApiResponse<FileConfig>) {
             );
         }
     };
-    (StatusCode::OK, Ok(Json(config)))
+    let res = WorkspaceResponse {
+        workspace_list: workspaces,
+    };
+    (StatusCode::OK, Ok(Json(res)))
 }
 
 #[utoipa::path(
@@ -52,7 +65,8 @@ async fn get_workspaces() -> (StatusCode, ApiResponse<FileConfig>) {
     path = "/api/v1/workspaces",
     responses(
         (status = 200, description = "All workspaces", body = Config)
-    )
+    ),
+    tag="workspace",
 )]
 async fn patch_workspaces(
     Extension(workspace_id): Extension<String>,
@@ -77,7 +91,8 @@ async fn patch_workspaces(
     responses(
         (status = 200, description = "Login success", body = LoginInfoResponse),
         (status = 400, description = "Login failed", body = BasicApiError),
-    )
+    ),
+    tag="workspace",
 )]
 async fn login_workspace(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -118,10 +133,19 @@ async fn login_workspace(
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        get_workspaces,
+        // post_workspaces,
+        // patch_workspaces,
+        // delete_workspace,
+        // get_workspace_icon
+        // post_workspaces_icon,
         login_workspace,
+        // post_workspace_add,
     ),
     components(
         schemas(
+            WorkspaceResponse,
+            FileWorkspaceInfo,
             LoginWorkspaceParams,
             LoginInfoResponse,
             BasicApiError,
@@ -147,6 +171,34 @@ pub fn router(conn: Arc<Mutex<Connection>>) -> Router {
 mod tests {
     use super::*;
     use crate::test_util::TestUtil;
+
+    mod test_get_workspace {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_success() {
+            let tu = TestUtil::new().await;
+            
+            {
+                let conn = tu.conn.lock().await;
+                conn.execute(
+                    "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
+                    ["/path/to/hoge_workspac.uzume", "12345678-xxxx-hoge-zzzz-000000000000", "hoge workspace"],
+                ).unwrap();
+            }
+
+            let (status, result) = get_workspaces(Extension(tu.conn.clone())).await;
+            assert_eq!(status, StatusCode::OK);
+            let result = result.unwrap();
+            assert_eq!(result.0.workspace_list.len(), 2);
+            assert_eq!(result.0.workspace_list[0].path, tu.workspace_path);
+            assert_eq!(result.0.workspace_list[0].workspace_id, tu.workspace_id);
+            assert_eq!(result.0.workspace_list[0].name, tu.workspace_name);
+            assert_eq!(result.0.workspace_list[1].path, "/path/to/hoge_workspac.uzume");
+            assert_eq!(result.0.workspace_list[1].workspace_id, "12345678-xxxx-hoge-zzzz-000000000000");
+            assert_eq!(result.0.workspace_list[1].name, "hoge workspace");
+        }
+    }
     
     mod test_login_workspace {
         use super::*;
@@ -162,7 +214,6 @@ mod tests {
 
             let body = Json(LoginWorkspaceParams { workspace_id: tu.workspace_id.clone() });
             let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
-            print!("status: {:?}, result: {:?}", status, result);
             assert_eq!(status, StatusCode::OK);
             let result = result.unwrap();
             assert_eq!(result.0.access_token.len(), 36);

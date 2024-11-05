@@ -12,6 +12,19 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn get_workspaces(conn: &Connection) -> Result<Vec<WorkspaceInfo>, rusqlite::Error> {
+        let mut stmt = conn.prepare("SELECT path, workspace_id, name FROM config")?;
+        let workspace_list = stmt.query_map(params![], |row| {
+            Ok(WorkspaceInfo {
+                path: row.get(0)?,
+                workspace_id: row.get(1)?,
+                name: row.get(2)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+
+        Ok(workspace_list)
+    }
+
     pub fn find(conn: &Connection, workspace_id: String) -> Result<Option<WorkspaceInfo>, rusqlite::Error> {
         let mut stmt = conn.prepare("SELECT path, workspace_id, name FROM config WHERE workspace_id = ?1")?;
         let workspace_list = stmt.query_map(params![workspace_id], |row| {

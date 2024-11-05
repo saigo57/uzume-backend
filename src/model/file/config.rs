@@ -1,5 +1,5 @@
-use crate::model::file::workspace_info::WorkspaceInfo;
 use serde::{Serialize, Deserialize};
+use crate::model::file::workspace_info::WorkspaceInfo;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
