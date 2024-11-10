@@ -16,6 +16,7 @@ use crate::model::file::config::Config as FileConfig;
 use crate::model::file::workspace_info::WorkspaceInfo as FileWorkspaceInfo;
 use crate::model::db::config::Config as DBConfig;
 use crate::model::db::auth::Auth as DBAuth;
+use crate::model::file::writer::Writer;
 use crate::util::{ApiResponse, BasicApiError};
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -26,6 +27,11 @@ struct WorkspaceResponse {
 #[derive(Debug, Serialize, ToSchema)]
 struct LoginInfoResponse {
     access_token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
+struct WorkspacePatchParams {
+    name: String,
 }
 
 #[derive(Deserialize, ToSchema, IntoParams)]
@@ -61,18 +67,33 @@ async fn get_workspaces(
 }
 
 #[utoipa::path(
-    post,
+    patch,
     path = "/api/v1/workspaces",
+    params(WorkspacePatchParams),
     responses(
-        (status = 200, description = "All workspaces", body = Config)
+        (status = 204, description = "patch workspace name")
     ),
     tag="workspace",
 )]
-async fn patch_workspaces(
+async fn patch_workspaces<T: Writer>(
     Extension(workspace_id): Extension<String>,
-) -> (StatusCode, ApiResponse<FileConfig>) {
-    println!("workspace_id: {}", workspace_id);
-    let config = match FileConfig::new() {
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+    Extension(writer): Extension<T>,
+    Json(body): Json<WorkspacePatchParams>,
+) -> (StatusCode, ApiResponse<()>) {
+    let conn = conn.lock().await;
+    
+    match DBConfig::update(&conn, workspace_id.clone(), body.name.clone()) {
+        Ok(_) => {},
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+
+    let workspaces = match DBConfig::get_workspaces(&conn) {
         Ok(config) => config,
         Err(err) => {
             return (
@@ -81,7 +102,18 @@ async fn patch_workspaces(
             );
         }
     };
-    (StatusCode::OK, Ok(Json(config)))
+    
+    match FileConfig::save_from_db(&mut writer.clone(), &workspaces) {
+        Ok(_) => {},
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    }
+
+    (StatusCode::NO_CONTENT, Ok(Json(())))
 }
 
 #[utoipa::path(
@@ -135,7 +167,7 @@ async fn login_workspace(
     paths(
         get_workspaces,
         // post_workspaces,
-        // patch_workspaces,
+        patch_workspaces,
         // delete_workspace,
         // get_workspace_icon
         // post_workspaces_icon,
@@ -146,6 +178,7 @@ async fn login_workspace(
         schemas(
             WorkspaceResponse,
             FileWorkspaceInfo,
+            WorkspacePatchParams,
             LoginWorkspaceParams,
             LoginInfoResponse,
             BasicApiError,
@@ -154,12 +187,12 @@ async fn login_workspace(
 )]
 pub struct ApiDoc;
 
-pub fn router(conn: Arc<Mutex<Connection>>) -> Router {
+pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
     let noauth_endpoints = Router::new()
         .route("/", get(get_workspaces))
         .route("/login", post(login_workspace));
     let auth_endpoints = Router::new()
-        .route("/", patch(patch_workspaces))
+        .route("/", patch(patch_workspaces::<T>))
         .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth));
 
     Router::new()
@@ -197,6 +230,49 @@ mod tests {
             assert_eq!(result.0.workspace_list[1].path, "/path/to/hoge_workspac.uzume");
             assert_eq!(result.0.workspace_list[1].workspace_id, "12345678-xxxx-hoge-zzzz-000000000000");
             assert_eq!(result.0.workspace_list[1].name, "hoge workspace");
+        }
+    }
+
+    mod test_patch_workspace {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_success() {
+            let tu = TestUtil::new().await;
+            
+            {
+                let conn = tu.conn.lock().await;
+                conn.execute(
+                    "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
+                    ["/path/to/hoge_workspac.uzume", "12345678-xxxx-hoge-zzzz-000000000000", "hoge workspace"],
+                ).unwrap();
+            }
+
+            let body = Json(WorkspacePatchParams { name: "new_workspace name".to_string() });
+            let (status, _result) = patch_workspaces(
+                Extension(tu.workspace_id.to_string()),
+                Extension(tu.conn.clone()),
+                Extension(tu.writer.clone()),
+                body
+            ).await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+
+            {
+                let conn = tu.conn.lock().await;
+                let workspace = DBConfig::find(&conn, tu.workspace_id.clone()).unwrap().unwrap();
+                assert_eq!(workspace.path, tu.workspace_path);
+                assert_eq!(workspace.workspace_id, tu.workspace_id);
+                assert_eq!(workspace.name, "new_workspace name");
+            }
+            
+            let config: FileConfig = serde_json::from_str(&tu.writer.get_json()).unwrap();
+            assert_eq!(config.workspace_list.len(), 2);
+            assert_eq!(config.workspace_list[0].path, tu.workspace_path);
+            assert_eq!(config.workspace_list[0].workspace_id, tu.workspace_id);
+            assert_eq!(config.workspace_list[0].name, "new_workspace name");
+            assert_eq!(config.workspace_list[1].path, "/path/to/hoge_workspac.uzume");
+            assert_eq!(config.workspace_list[1].workspace_id, "12345678-xxxx-hoge-zzzz-000000000000");
+            assert_eq!(config.workspace_list[1].name, "hoge workspace");
         }
     }
     
