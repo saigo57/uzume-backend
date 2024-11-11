@@ -22,7 +22,11 @@ impl Config {
         let config = Self {
             workspace_list: workspace_list.to_vec(),
         };
-        let json = config.to_json()?;
+        config.save(writer)
+    }
+    
+    pub fn save<T: Writer>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        let json = self.to_json()?;
         let path = Path::new(Self::FILE_PATH);
         writer.save(path.to_path_buf(), json)?;
         Ok(())

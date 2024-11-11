@@ -166,13 +166,11 @@ async fn login_workspace(
 #[openapi(
     paths(
         get_workspaces,
-        // post_workspaces,
         patch_workspaces,
         // delete_workspace,
         // get_workspace_icon
         // post_workspaces_icon,
         login_workspace,
-        // post_workspace_add,
     ),
     components(
         schemas(

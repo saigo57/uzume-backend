@@ -10,6 +10,10 @@ pub struct FileWriter;
 
 impl Writer for FileWriter {
     fn save(&self, path: std::path::PathBuf, json: String) -> Result<(), std::io::Error> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let mut file = std::fs::File::create(path)?;
         file.write_all(json.as_bytes())?;
         Ok(())
