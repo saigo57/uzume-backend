@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 pub trait Writer: Send + Sync + Clone {
     fn save(&self, path: std::path::PathBuf, json: String) -> Result<(), std::io::Error>;
+    fn write_file(&self, path: std::path::PathBuf, data: &[u8]) -> Result<(), std::io::Error>;
 }
 
 #[derive(Clone)]
@@ -16,6 +17,16 @@ impl Writer for FileWriter {
 
         let mut file = std::fs::File::create(path)?;
         file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+    
+    fn write_file(&self, path: std::path::PathBuf, data: &[u8]) -> Result<(), std::io::Error> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let mut file = std::fs::File::create(path)?;
+        file.write_all(data)?;
         Ok(())
     }
 }
@@ -50,6 +61,11 @@ impl MockWriter {
 impl Writer for MockWriter {
     fn save(&self, path: std::path::PathBuf, json: String) -> Result<(), std::io::Error> {
         *self.data.lock().unwrap() = Some(MockWriteData { path: path.to_string_lossy().to_string(), json });
+        Ok(())
+    }
+    
+    fn write_file(&self, path: std::path::PathBuf, data: &[u8]) -> Result<(), std::io::Error> {
+        *self.data.lock().unwrap() = Some(MockWriteData { path: path.to_string_lossy().to_string(), json: String::from_utf8_lossy(data).to_string() });
         Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use std::path::Path;
 use serde::{Serialize, Deserialize};
+use tokio::io::AsyncWriteExt;
 use crate::model::file::writer::Writer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,15 @@ impl Workspace {
         let workspace_dir_path = Path::new(path);
         let workspace_json_path = workspace_dir_path.join("workspace.json");
         writer.save(workspace_json_path, json)?;
+        Ok(())
+    }
+    
+    pub async fn save_icon<T: Writer>(writer: &mut T, path: &str, data: &[u8], ext: &str) -> Result<(), std::io::Error> {
+        let workspace_dir_path = Path::new(path);
+        let workspace_icon_path = workspace_dir_path.join(format!("icon.{}", ext));
+        
+        writer.write_file(workspace_icon_path, data)?;
+
         Ok(())
     }
 }
