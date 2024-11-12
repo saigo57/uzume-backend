@@ -20,6 +20,7 @@ mod controller;
 mod model;
 mod util;
 mod test_util;
+mod logger;
 
 const DEFAULT_PORT: u16 = 22113;
 
@@ -136,6 +137,17 @@ fn add_workspace<T: Writer>(writer: &mut T, config: &mut Config, path: &str) -> 
 
 #[tokio::main]
 async fn main() {
+    match logger::init_logger() {
+        Ok(_) => {},
+        Err(e) => {
+            eprintln!("logger init error!");
+            eprintln!("{}", e);
+            return;
+        }
+    }
+
+    log::info!("start uzume server.");
+
     let args: Vec<String> = env::args().collect();
 
     let start_mode = match parse_args(&args) {

@@ -38,8 +38,12 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), B
         let workspace_path = workspace.clone().path.clone();
         let workspace_path = Path::new(&workspace_path);
         let images_path = workspace_path.join("images");
-        let entries = fs::read_dir(images_path.clone())?;
+        if !images_path.is_dir() {
+            log::info!("images directory not found. skip load.");
+            return Ok(());
+        }
 
+        let entries = fs::read_dir(images_path.clone())?;
         for entry in entries {
             let entry = entry?;
             let image_dir_name = entry.file_name();
