@@ -46,7 +46,7 @@ async fn get_images(
     let images = match DBImageInfo::get(&conn, workspace_id.clone(), page) {
         Ok(images) => images,
         Err(e) => {
-            eprintln!("{}", e);
+            log::error!("{}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Err(Json(BasicApiError { error_message: e.to_string() }))

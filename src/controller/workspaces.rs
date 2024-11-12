@@ -309,7 +309,6 @@ mod tests {
 
             let body = Json(LoginWorkspaceParams { workspace_id: "invalid_workspace_id".to_string() });
             let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
-            print!("status: {:?}, result: {:?}", status, result);
             assert_eq!(status, StatusCode::BAD_REQUEST);
 
             {

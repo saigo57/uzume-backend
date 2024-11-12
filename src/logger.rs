@@ -6,7 +6,7 @@ pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
         .level(log::LevelFilter::Trace)
         .format(|out, message, record| {
             out.finish(format_args! {
-                "[{} {}] {} {}:{}",
+                "[{} {}] {} [{}:{}]",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
                 message,
@@ -20,7 +20,7 @@ pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
         .level(log::LevelFilter::Trace)
         .format(|out, message, record| {
             out.finish(format_args! {
-                "[{} {}] {} {}:{}",
+                "[{} {}] {} [{}:{}]",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
                 message,

@@ -153,7 +153,7 @@ async fn main() {
     let start_mode = match parse_args(&args) {
         Ok(mode) => mode,
         Err(e) => {
-            eprintln!("{}", e);
+            log::error!("{}", e);
             return;
         }
     };
@@ -169,17 +169,17 @@ async fn main() {
                 Ok(mut config) => {
                     match create_workspace(&mut FileWriter, &mut config, &name, &path) {
                         Ok(_) => {
-                            println!("workspace created.");
+                            log::info!("workspace created.");
                         },
                         Err(e) => {
-                            eprintln!("workspace create error!");
-                            eprintln!("{}", e);
+                            log::error!("workspace create error!");
+                            log::error!("{}", e);
                         }
                     }
                 },
                 Err(e) => {
-                    eprintln!("config load error!");
-                    eprintln!("{}", e);
+                    log::error!("config load error!");
+                    log::error!("{}", e);
                     return;
                 }
             };
@@ -190,17 +190,17 @@ async fn main() {
                 Ok(mut config) => {
                     match add_workspace(&mut FileWriter, &mut config, &path) {
                         Ok(_) => {
-                            println!("workspace added.");
+                            log::info!("workspace added.");
                         },
                         Err(e) => {
-                            eprintln!("workspace add error!");
-                            eprintln!("{}", e);
+                            log::error!("workspace add error!");
+                            log::error!("{}", e);
                         }
                     }
                 },
                 Err(e) => {
-                    eprintln!("config load error!");
-                    eprintln!("{}", e);
+                    log::error!("config load error!");
+                    log::error!("{}", e);
                     return;
                 }
             };
@@ -208,35 +208,35 @@ async fn main() {
         },
     };
 
-    println!("port: {}", port);
+    log::info!("port: {}", port);
 
     let conn = match Connection::open_in_memory() {
         Ok(conn) => conn,
         Err(e) => {
-            eprintln!("connection open error!");
-            eprintln!("{}", e);
+            log::error!("connection open error!");
+            log::error!("{}", e);
             return;
         }
     };
     let conn = Arc::new(Mutex::new(conn));
     match schema::create_schema(conn.clone()).await {
         Ok(_) => {
-            println!("schema created.");
+            log::info!("schema created.");
         },
         Err(e) => {
-            eprintln!("schema create error!");
-            eprintln!("{}", e);
+            log::error!("schema create error!");
+            log::error!("{}", e);
             return;
         }
     }
 
     match initialize::initialize(conn.clone()).await {
         Ok(_) => {
-            println!("initialized.");
+            log::info!("initialized.");
         },
         Err(e) => {
-            eprintln!("initialize error!");
-            eprintln!("{}", e);
+            log::error!("initialize error!");
+            log::error!("{}", e);
             return;
         }
     }
@@ -255,16 +255,16 @@ async fn main() {
     let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await {
         Ok(listener) => listener,
         Err(e) => {
-            eprintln!("listener bind error!");
-            eprintln!("{}", e);
+            log::error!("listener bind error!");
+            log::error!("{}", e);
             return;
         }
     };
     match axum::serve(listener, app).await {
         Ok(_) => {},
         Err(e) => {
-            eprintln!("serve error!");
-            eprintln!("{}", e);
+            log::error!("serve error!");
+            log::error!("{}", e);
             return;
         }
     };
