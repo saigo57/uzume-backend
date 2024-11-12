@@ -357,8 +357,13 @@ mod tests {
             ].to_vec(),
         };
         create_workspace(&mut tu.writer, &mut config, "new_workspace_name", "/path/to/new_workspace.uzume").unwrap();
-        
-        let config: Config = serde_json::from_str(&tu.writer.get_json()).unwrap();
+
+        let history = tu.writer.history.lock().unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].path, "/path/to/new_workspace.uzume/workspace.json");
+        assert_eq!(history[1].path, "./config.json");
+
+        let config: Config = serde_json::from_str(&history[1].data).unwrap();
         assert_eq!(config.workspace_list.len(), 2);
         assert_eq!(config.workspace_list[0].path, tu.workspace_path);
         assert_eq!(config.workspace_list[0].name, tu.workspace_name);

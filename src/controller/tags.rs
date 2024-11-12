@@ -146,9 +146,11 @@ mod tests {
         ).await;
         assert_eq!(status, StatusCode::CREATED);
 
-        assert_eq!(tu.writer.get_path(), workspace_path.join("tags.json").to_str().unwrap());
+        let history = tu.writer.history.lock().unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].path, workspace_path.join("tags.json").to_str().unwrap());
 
-        let tags: FileTags = serde_json::from_str(&tu.writer.get_json()).unwrap();
+        let tags: FileTags = serde_json::from_str(&history[0].data).unwrap();
         assert_eq!(tags.tags.len(), 1);
 
         let tag = tags.tags.first().unwrap();

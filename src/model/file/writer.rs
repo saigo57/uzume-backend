@@ -35,37 +35,35 @@ impl Writer for FileWriter {
 #[derive(Debug)]
 pub struct MockWriteData {
     pub path: String,
-    pub json: String,
+    pub data: String,
 }
 
 #[derive(Clone)]
 pub struct MockWriter {
-    pub data: Arc<Mutex<Option<MockWriteData>>>,
+    pub history: Arc<Mutex<Vec<MockWriteData>>>,
 }
 
 #[allow(dead_code)] // テスト用コード
 impl MockWriter {
-    pub fn get_path(&self) -> String {
-        let data = self.data.lock().unwrap();
-        let data = data.as_ref().unwrap();
-        data.path.clone()
-    }
-
-    pub fn get_json(&self) -> String {
-        let data = self.data.lock().unwrap();
-        let data = data.as_ref().unwrap();
-        data.json.clone()
-    }
 }
 
 impl Writer for MockWriter {
     fn save(&self, path: std::path::PathBuf, json: String) -> Result<(), std::io::Error> {
-        *self.data.lock().unwrap() = Some(MockWriteData { path: path.to_string_lossy().to_string(), json });
+        let mut history = self.history.lock().unwrap();
+        history.push(MockWriteData {
+            path: path.to_string_lossy().to_string(),
+            data: json,
+        });
         Ok(())
     }
     
     fn write_file(&self, path: std::path::PathBuf, data: &[u8]) -> Result<(), std::io::Error> {
-        *self.data.lock().unwrap() = Some(MockWriteData { path: path.to_string_lossy().to_string(), json: String::from_utf8_lossy(data).to_string() });
+        let mut history = self.history.lock().unwrap();
+        history.push(MockWriteData {
+            path: path.to_string_lossy().to_string(),
+            data: String::from_utf8_lossy(data).to_string()
+        });
+
         Ok(())
     }
 }

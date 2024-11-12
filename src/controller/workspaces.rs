@@ -388,7 +388,9 @@ mod tests {
                 assert_eq!(workspace.name, "new_workspace name");
             }
             
-            let config: FileConfig = serde_json::from_str(&tu.writer.get_json()).unwrap();
+            let history = tu.writer.history.lock().unwrap();
+            assert_eq!(history.len(), 1);
+            let config: FileConfig = serde_json::from_str(&history[0].data).unwrap();
             assert_eq!(config.workspace_list.len(), 2);
             assert_eq!(config.workspace_list[0].path, tu.workspace_path);
             assert_eq!(config.workspace_list[0].workspace_id, tu.workspace_id);
@@ -486,8 +488,10 @@ mod tests {
             ).await;
             
             assert_eq!(status, StatusCode::CREATED);
-            assert_eq!(tu.writer.get_path(), format!("{}/icon.png", tu.workspace_path));
-            assert_eq!(tu.writer.get_json(), "dummy image data");
+            let history = tu.writer.history.lock().unwrap();
+            assert_eq!(history.len(), 1);
+            assert_eq!(history[0].path, format!("{}/icon.png", tu.workspace_path));
+            assert_eq!(history[0].data, "dummy image data");
         }
     }
 }

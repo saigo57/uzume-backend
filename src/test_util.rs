@@ -17,7 +17,7 @@ pub struct TestUtil {
 #[allow(dead_code)] // テスト用コード
 impl TestUtil {
     pub async fn new() -> Self {
-        let writer = MockWriter{data: Arc::new(std::sync::Mutex::new(None))};
+        let writer = MockWriter{history: Arc::new(std::sync::Mutex::new(vec![]))};
         let conn = Connection::open_in_memory().unwrap();
         let conn = Arc::new(Mutex::new(conn));
         create_schema(conn.clone()).await.unwrap();
