@@ -19,6 +19,7 @@ use crate::model::db::config::Config as DBConfig;
 use crate::model::db::auth::Auth as DBAuth;
 use crate::model::file::writer::Writer;
 use crate::util::{ApiResponse, BasicApiError};
+use crate::multipart_params::MultipartParams;
 
 #[derive(Debug, Serialize, ToSchema)]
 struct WorkspaceResponse {
@@ -38,6 +39,12 @@ struct WorkspacePatchParams {
 #[derive(Deserialize, ToSchema, IntoParams)]
 struct LoginWorkspaceParams {
     workspace_id: String,
+}
+
+#[derive(Deserialize, ToSchema, IntoParams)]
+struct IconMultipartBody {
+    #[schema(value_type = String, format = Binary)]
+    icon: Vec<u8>,
 }
 
 #[utoipa::path(
@@ -165,123 +172,94 @@ async fn login_workspace(
 
 #[utoipa::path(
     post,
-    path = "/api/v1/workspaces/login",
-    params(LoginWorkspaceParams),
+    path = "/api/v1/workspaces/icon",
+    request_body(content = IconMultipartBody, content_type="multipart/form-data"),
     responses(
-        (status = 200, description = "Login success", body = LoginInfoResponse),
-        (status = 400, description = "Login failed", body = BasicApiError),
+        (status = 201, description = "Icon upload success"),
+        (status = 400, description = "Icon upload failed", body = BasicApiError),
     ),
-    tag="workspace",
+    tag="workspace/icon",
 )]
-async fn post_workspace_icon<T: Writer>(
+async fn post_workspaces_icon<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Extension(writer): Extension<T>,
     mut multipart: Multipart,
 ) -> (StatusCode, ApiResponse<()>) {
-    println!("post_workspace_icon");
     let conn = conn.lock().await;
-
-    while let field = multipart.next_field().await {
-        let field = match field {
-            Ok(Some(field)) => field,
-            Ok(None) => break,
-            Err(err) => {
-                println!("error: {}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: err.to_string() }))
-                );
-            }
-        };
-        
-        let param_name = match field.name() {
-            Some(name) => name.to_string(),
-            None => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "Invalid parameter name".to_string() }))
-                );
-            }
-        };
-        
-        if param_name != "icon" {
-            log::error!("Invalid parameter name: {}", param_name);
+    
+    let multipart_params = match MultipartParams::new(&mut multipart).await {
+        Ok(params) => params,
+        Err(err) => {
+            log::error!("MultipartParams error: {}", err);
             return (
-                StatusCode::BAD_REQUEST,
-                Err(Json(BasicApiError { error_message: "Invalid parameter name".to_string() }))
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: "MultipartParams error.".to_string() }))
             );
-        }
-        
-        let file_name = match field.file_name() {
-            Some(name) => name.to_owned(),
-            None => {
-                log::error!("get file_name error.");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "get file_name error.".to_string() }))
-                );
-            }
-        };
-        
-        let data = match field.bytes().await {
-            Ok(data) => data,
-            Err(err) => {
-                log::error!("get file data error: {}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "get file data error.".to_string() }))
-                );
-            },
-        };
-        
-        let workspace_path = match DBConfig::find(&conn, workspace_id.clone()) {
-            Ok(Some(config)) => config.path,
-            Ok(None) => {
-                log::error!("workspace not found.");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "workspace not found.".to_string() }))
-                );
-            },
-            Err(err) => {
-                log::error!("find workspace error: {}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "find workspace error.".to_string() }))
-                );
-            },
-        };
-        
-        let path = std::path::Path::new(&file_name);
-        let ext_str = match path.extension() {
-            Some(ext) => ext.to_str(),
-            None => None,
-        };
-        let ext_str = match ext_str {
-            Some(ext) => ext,
-            None => {
-                log::error!("get extension error.");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "get extension error.".to_string() }))
-                );
-            },
-        };
-
-        match FileWorkspace::save_icon(&mut writer.clone(), &workspace_path, &data, ext_str).await {
-            Ok(_) => {},
-            Err(err) => {
-                log::error!("save icon error: {}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Err(Json(BasicApiError { error_message: "save icon error.".to_string() }))
-                );
-            },
-        };
-        
-        log::debug!("file_name: {}", file_name);
+        },
+    };
+    
+    if multipart_params.files.len() != 1 {
+        log::error!("Invalid file count: {}", multipart_params.files.len());
+        return (
+            StatusCode::BAD_REQUEST,
+            Err(Json(BasicApiError { error_message: "Invalid file count".to_string() }))
+        );
     }
+    
+    let icon_field = &multipart_params.files[0];
+    if icon_field.param_name != "icon" {
+        log::error!("Invalid parameter name: {}", icon_field.param_name);
+        return (
+            StatusCode::BAD_REQUEST,
+            Err(Json(BasicApiError { error_message: "Invalid parameter name".to_string() }))
+        );
+    }
+
+    let workspace_path = match DBConfig::find(&conn, workspace_id.clone()) {
+        Ok(Some(config)) => config.path,
+        Ok(None) => {
+            log::error!("workspace not found.");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: "workspace not found.".to_string() }))
+            );
+        },
+        Err(err) => {
+            log::error!("find workspace error: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: "find workspace error.".to_string() }))
+            );
+        },
+    };
+    
+    let path = std::path::Path::new(&icon_field.file_name);
+    let ext_str = match path.extension() {
+        Some(ext) => ext.to_str(),
+        None => None,
+    };
+    let ext_str = match ext_str {
+        Some(ext) => ext,
+        None => {
+            log::error!("get extension error.");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: "get extension error.".to_string() }))
+            );
+        },
+    };
+
+    match FileWorkspace::save_icon(&mut writer.clone(), &workspace_path, &icon_field.data, ext_str).await {
+        Ok(_) => {},
+        Err(err) => {
+            log::error!("save icon error: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: "save icon error.".to_string() }))
+            );
+        },
+    };
 
     (StatusCode::CREATED, Ok(Json(())))
 }
@@ -293,7 +271,7 @@ async fn post_workspace_icon<T: Writer>(
         patch_workspaces,
         // delete_workspace,
         // get_workspace_icon
-        // post_workspaces_icon,
+        post_workspaces_icon,
         login_workspace,
     ),
     components(
@@ -302,6 +280,7 @@ async fn post_workspace_icon<T: Writer>(
             FileWorkspaceInfo,
             WorkspacePatchParams,
             LoginWorkspaceParams,
+            IconMultipartBody,
             LoginInfoResponse,
             BasicApiError,
         ),
@@ -315,7 +294,7 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
         .route("/login", post(login_workspace));
     let auth_endpoints = Router::new()
         .route("/", patch(patch_workspaces::<T>))
-        .route("/icon", post(post_workspace_icon::<T>))
+        .route("/icon", post(post_workspaces_icon::<T>))
         .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth));
 
     Router::new()
@@ -480,7 +459,7 @@ mod tests {
                 .unwrap();
             let multipart = Multipart::from_request(request, &()).await.unwrap();
 
-            let (status, _result) = post_workspace_icon(
+            let (status, _result) = post_workspaces_icon(
                 Extension(tu.workspace_id.clone()),
                 Extension(tu.conn.clone()),
                 Extension(tu.writer.clone()),

@@ -21,6 +21,7 @@ mod model;
 mod util;
 mod test_util;
 mod logger;
+mod multipart_params;
 
 const DEFAULT_PORT: u16 = 22113;
 
