@@ -1,5 +1,7 @@
 use std::path::Path;
 use serde::{Serialize, Deserialize};
+use rusqlite::Connection;
+use crate::model::db::config::Config as DBConfig;
 use crate::model::file::writer::Writer;
 
 #[derive(Debug)]
@@ -59,17 +61,38 @@ impl Workspace {
         Ok(())
     }
     
-    pub async fn save_icon<T: Writer>(writer: &mut T, path: &str, data: &[u8], ext: &str) -> Result<(), std::io::Error> {
-        let workspace_dir_path = Path::new(path);
+    pub fn save_icon<T: Writer>(conn: &Connection, writer: &mut T, workspace_id: &str, data: &[u8], ext: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let workspace_dir_path = Self::get_workspace_path(conn, workspace_id)?;
+        let workspace_dir_path = Path::new(&workspace_dir_path);
         let workspace_icon_path = workspace_dir_path.join(format!("icon.{}", ext));
+        
+        if let Ok(icon_path) = Self::get_icon_path(conn, workspace_id) {
+            let icon_path = Path::new(&workspace_dir_path).join(icon_path);
+            std::fs::remove_file(icon_path)?;
+        };
         
         writer.write_file(workspace_icon_path, data)?;
 
         Ok(())
     }
     
-    pub fn get_icon_path(path: &str) -> Result<String, std::io::Error> {
-        let workspace_dir_path = Path::new(path);
+    pub fn get_workspace_path(conn: &Connection, workspace_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+        match DBConfig::find(conn, workspace_id.to_string()) {
+            Ok(Some(config)) => Ok(config.path),
+            Ok(None) => {
+                log::error!("workspace not found.");
+                Err(Box::new(WorkspaceError::new("workspace not found.".to_string())))
+            },
+            Err(err) => {
+                log::error!("find workspace error: {}", err);
+                Err(Box::new(WorkspaceError::new("find workspace error.".to_string())))
+            },
+        }
+    }
+    
+    pub fn get_icon_path(conn: &Connection, workspace_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let workspace_dir_path = Self::get_workspace_path(conn, workspace_id)?;
+        let workspace_dir_path = Path::new(&workspace_dir_path);
         
         let entries = std::fs::read_dir(workspace_dir_path)?;
         for entry in entries {
@@ -84,13 +107,16 @@ impl Workspace {
         Ok("".to_string())
     }
     
-    pub fn get_icon_image(path: &str) -> Result<Image, Box<dyn std::error::Error>> {
-        let icon_path = Self::get_icon_path(path)?;
+    pub fn get_icon_image(conn: &Connection, workspace_id: &str) -> Result<Image, Box<dyn std::error::Error>> {
+        let icon_path = Self::get_icon_path(conn, workspace_id)?;
         if icon_path.is_empty() {
             return Err(Box::new(WorkspaceError::new("icon file not found".to_string())));
         }
         
-        let icon_path = Path::new(path).join(icon_path);
+        let workspace_dir_path = Self::get_workspace_path(conn, workspace_id)?;
+        let workspace_dir_path = Path::new(&workspace_dir_path);
+
+        let icon_path = Path::new(workspace_dir_path).join(icon_path);
 
         let path = std::path::Path::new(&icon_path);
         let ext = match path.extension() {

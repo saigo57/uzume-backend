@@ -186,28 +186,8 @@ async fn get_workspaces_icon(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
 ) -> Response {
     let conn = conn.lock().await;
-
-    let workspace_path = match DBConfig::find(&conn, workspace_id.clone()) {
-        Ok(Some(config)) => config.path,
-        Ok(None) => {
-            log::error!("workspace not found.");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(BasicApiError { error_message: "workspace not found.".to_string() })
-            )
-            .into_response();
-        },
-        Err(err) => {
-            log::error!("find workspace error: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(BasicApiError { error_message: "find workspace error.".to_string() })
-            )
-            .into_response();
-        },
-    };
     
-    match FileWorkspace::get_icon_image(&workspace_path) {
+    match FileWorkspace::get_icon_image(&conn, &workspace_id) {
         Ok(image) => {
             axum::response::Response::builder()
                 .status(StatusCode::OK)
@@ -273,24 +253,6 @@ async fn post_workspaces_icon<T: Writer>(
         );
     }
 
-    let workspace_path = match DBConfig::find(&conn, workspace_id.clone()) {
-        Ok(Some(config)) => config.path,
-        Ok(None) => {
-            log::error!("workspace not found.");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "workspace not found.".to_string() }))
-            );
-        },
-        Err(err) => {
-            log::error!("find workspace error: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "find workspace error.".to_string() }))
-            );
-        },
-    };
-    
     let path = std::path::Path::new(&icon_field.file_name);
     let ext_str = match path.extension() {
         Some(ext) => ext.to_str(),
@@ -307,7 +269,7 @@ async fn post_workspaces_icon<T: Writer>(
         },
     };
 
-    match FileWorkspace::save_icon(&mut writer.clone(), &workspace_path, &icon_field.data, ext_str).await {
+    match FileWorkspace::save_icon(&conn, &mut writer.clone(), &workspace_id, &icon_field.data, ext_str) {
         Ok(_) => {},
         Err(err) => {
             log::error!("save icon error: {}", err);
