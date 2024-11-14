@@ -3,6 +3,8 @@ use axum::{
     routing::{get, post, patch},
     http::StatusCode,
     extract::{Extension, Multipart},
+    response::{Response, IntoResponse},
+    body::Body,
     Json,
     Router,
 };
@@ -171,6 +173,61 @@ async fn login_workspace(
 }
 
 #[utoipa::path(
+    get,
+    path = "/api/v1/workspaces/icon",
+    responses(
+        (status = 200, description = "Icon image", content_type="image/*"),
+        (status = 404, description = "Icon isn't uploaded yet"),
+    ),
+    tag="workspace/icon",
+)]
+async fn get_workspaces_icon(
+    Extension(workspace_id): Extension<String>,
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+) -> Response {
+    let conn = conn.lock().await;
+
+    let workspace_path = match DBConfig::find(&conn, workspace_id.clone()) {
+        Ok(Some(config)) => config.path,
+        Ok(None) => {
+            log::error!("workspace not found.");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(BasicApiError { error_message: "workspace not found.".to_string() })
+            )
+            .into_response();
+        },
+        Err(err) => {
+            log::error!("find workspace error: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(BasicApiError { error_message: "find workspace error.".to_string() })
+            )
+            .into_response();
+        },
+    };
+    
+    match FileWorkspace::get_icon_image(&workspace_path) {
+        Ok(image) => {
+            axum::response::Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", format!("image/{}", image.ext))
+                .body(Body::from(image.data))
+                .unwrap()
+        },
+        Err(err) => {
+            // まだアイコンが設定されていない場合は404を返す
+            log::info!("get icon image: {}", err);
+            return (
+                StatusCode::NOT_FOUND,
+                ()
+            )
+            .into_response();
+        },
+    }
+}
+
+#[utoipa::path(
     post,
     path = "/api/v1/workspaces/icon",
     request_body(content = IconMultipartBody, content_type="multipart/form-data"),
@@ -270,7 +327,7 @@ async fn post_workspaces_icon<T: Writer>(
         get_workspaces,
         patch_workspaces,
         // delete_workspace,
-        // get_workspace_icon
+        get_workspaces_icon,
         post_workspaces_icon,
         login_workspace,
     ),
@@ -294,6 +351,7 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
         .route("/login", post(login_workspace));
     let auth_endpoints = Router::new()
         .route("/", patch(patch_workspaces::<T>))
+        .route("/icon", get(get_workspaces_icon))
         .route("/icon", post(post_workspaces_icon::<T>))
         .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth));
 
