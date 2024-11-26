@@ -1,6 +1,6 @@
 use axum::{
     self,
-    routing::{get, post, patch},
+    routing::{get, post, patch, delete},
     http::StatusCode,
     extract::{Extension, Multipart},
     response::{Response, IntoResponse},
@@ -113,6 +113,54 @@ async fn patch_workspaces<T: Writer>(
         }
     };
     
+    match FileConfig::save_from_db(&mut writer.clone(), &workspaces) {
+        Ok(_) => {},
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    }
+
+    (StatusCode::NO_CONTENT, Ok(Json(())))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/workspaces",
+    responses(
+        (status = 204, description = "Success to delete workspace"),
+    ),
+    tag="workspace",
+)]
+async fn delete_workspaces<T: Writer>(
+    Extension(workspace_id): Extension<String>,
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+    Extension(writer): Extension<T>,
+) -> (StatusCode, ApiResponse<()>) {
+    let conn = conn.lock().await;
+    
+    match DBConfig::delete(&conn, workspace_id.clone()) {
+        Ok(_) => {},
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+
+    let workspaces = match DBConfig::get_workspaces(&conn) {
+        Ok(config) => config,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Err(Json(BasicApiError { error_message: err.to_string() }))
+            );
+        }
+    };
+
     match FileConfig::save_from_db(&mut writer.clone(), &workspaces) {
         Ok(_) => {},
         Err(err) => {
@@ -288,7 +336,7 @@ async fn post_workspaces_icon<T: Writer>(
     paths(
         get_workspaces,
         patch_workspaces,
-        // delete_workspace,
+        delete_workspaces,
         get_workspaces_icon,
         post_workspaces_icon,
         login_workspace,
@@ -313,6 +361,7 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
         .route("/login", post(login_workspace));
     let auth_endpoints = Router::new()
         .route("/", patch(patch_workspaces::<T>))
+        .route("/", delete(delete_workspaces::<T>))
         .route("/icon", get(get_workspaces_icon))
         .route("/icon", post(post_workspaces_icon::<T>))
         .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth));
@@ -397,6 +446,44 @@ mod tests {
             assert_eq!(config.workspace_list[1].path, "/path/to/hoge_workspac.uzume");
             assert_eq!(config.workspace_list[1].workspace_id, "12345678-xxxx-hoge-zzzz-000000000000");
             assert_eq!(config.workspace_list[1].name, "hoge workspace");
+        }
+    }
+
+    mod test_delete_workspace {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_success() {
+            let tu = TestUtil::new().await;
+            
+            {
+                let conn = tu.conn.lock().await;
+                conn.execute(
+                    "INSERT INTO config (path, workspace_id, name) VALUES (?1, ?2, ?3)",
+                    ["/path/to/hoge_workspac.uzume", "12345678-xxxx-hoge-zzzz-000000000000", "hoge workspace"],
+                ).unwrap();
+            }
+
+            let (status, _result) = delete_workspaces(
+                Extension(tu.workspace_id.to_string()),
+                Extension(tu.conn.clone()),
+                Extension(tu.writer.clone()),
+            ).await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+
+            {
+                let conn = tu.conn.lock().await;
+                let workspace = DBConfig::find(&conn, tu.workspace_id.clone()).unwrap();
+                assert!(workspace.is_none());
+            }
+            
+            let history = tu.writer.history.lock().unwrap();
+            assert_eq!(history.len(), 1);
+            let config: FileConfig = serde_json::from_str(&history[0].data).unwrap();
+            assert_eq!(config.workspace_list.len(), 1);
+            assert_eq!(config.workspace_list[0].path, "/path/to/hoge_workspac.uzume");
+            assert_eq!(config.workspace_list[0].workspace_id, "12345678-xxxx-hoge-zzzz-000000000000");
+            assert_eq!(config.workspace_list[0].name, "hoge workspace");
         }
     }
     

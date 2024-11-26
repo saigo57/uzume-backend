@@ -41,9 +41,14 @@ impl Config {
 
         Ok(Some(workspace_list[0].clone()))
     }
-    
+
     pub fn update(conn: &Connection, workspace_id: String, name: String) -> Result<(), rusqlite::Error> {
         conn.execute("UPDATE config SET name = ?2 WHERE workspace_id = ?1", params![workspace_id, name])?;
+        Ok(())
+    }
+    
+    pub fn delete(conn: &Connection, workspace_id: String) -> Result<(), rusqlite::Error> {
+        conn.execute("DELETE FROM config WHERE workspace_id = ?1", params![workspace_id])?;
         Ok(())
     }
 }
