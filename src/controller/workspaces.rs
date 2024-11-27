@@ -45,6 +45,7 @@ struct LoginWorkspaceParams {
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 struct IconMultipartBody {
+    #[allow(dead_code)]
     #[schema(value_type = String, format = Binary)]
     icon: Vec<u8>,
 }
@@ -521,7 +522,7 @@ mod tests {
             }
 
             let body = Json(LoginWorkspaceParams { workspace_id: "invalid_workspace_id".to_string() });
-            let (status, result) = login_workspace(Extension(tu.conn.clone()), body).await;
+            let (status, _result) = login_workspace(Extension(tu.conn.clone()), body).await;
             assert_eq!(status, StatusCode::BAD_REQUEST);
 
             {

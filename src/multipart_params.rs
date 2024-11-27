@@ -21,6 +21,7 @@ impl std::fmt::Display for MultipartParamsError {
 
 impl std::error::Error for MultipartParamsError {}
 
+#[allow(dead_code)]
 pub struct MultipartText {
     pub param_name: String,
     pub data: String,
