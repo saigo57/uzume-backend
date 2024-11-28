@@ -1,0 +1,169 @@
+openapi: "3.0.3"
+servers:
+  - url: "http://localhost:22113"
+security: []
+info:
+  description: "Rust版 Uzume Backendのドキュメント"
+  title: "Uzume Backend API"
+  version: "1.0.0"
+paths:
+  /api/v1/workspaces/login:
+    post:
+      summary: "ログイン"
+      description: ""
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspace_id:
+                  type: string
+                  example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      responses:
+        200:
+          description: "workspace一覧"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspaces"
+        400:
+          description: "ログインエラー"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicError"
+  /api/v1/workspaces:
+    get:
+      summary: "workspace一覧を取得"
+      description: ""
+      tags: ["Workspace"]
+      responses:
+        200:
+          description: "workspace一覧"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspaces"
+    patch:
+      summary: "workspace名を変更"
+      description: ""
+      tags: ["Workspace"]
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "新ワークスペース名"
+      responses:
+        204:
+          description: "成功"
+        401:
+          $ref: "#/components/responses/UnauthorizedError"
+    delete:
+      summary: "workspaceを削除"
+      description: "config.jsonから除外するだけで、workspaceディレクトリの実体は削除されない"
+      tags: ["Workspace"]
+      security:
+        - basicAuth: []
+      responses:
+        204:
+          description: "成功"
+        401:
+          $ref: "#/components/responses/UnauthorizedError"
+  /api/v1/workspaces/icon:
+    get:
+      summary: "workspaceアイコンを取得"
+      description: ""
+      tags: ["WorkspaceIcon"]
+      security:
+        - basicAuth: []
+      responses:
+        200:
+          description: "workspace一覧"
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/jpg:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        401:
+          $ref: "#/components/responses/UnauthorizedError"
+    post:
+      summary: "workspaceアイコンを登録"
+      description: "すでに存在していた場合は差し替えられる"
+      tags: ["WorkspaceIcon"]
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                icon:
+                  type: string
+                  format: binary
+                  description: "アイコン画像"
+      responses:
+        201:
+          description: "成功"
+        401:
+          $ref: "#/components/responses/UnauthorizedError"
+
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: >
+        basic認証を使用して認証を行う。workspace_idと/v1/workspace/loginで取得したaccess_tokenを:で結合、base64エンコードし、それを"Basic "の後に結合したものをAuthorizationヘッダに付与する。
+  schemas:
+    Workspaces:
+      type: object
+      properties:
+        workspace_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+    Workspace:
+      type: object
+      properties:
+        path:
+          type: string
+          example: "/path/to/workspace"
+        workspace_id:
+          type: integer
+          example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        name:
+          type: string
+          example: "ワークスペース名"
+    BasicError:
+      type: object
+      properties:
+        error_message:
+          type: string
+          example: "エラーメッセージ"
+  responses:
+    UnauthorizedError:
+      description: "認証エラー"

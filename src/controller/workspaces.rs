@@ -9,7 +9,6 @@ use axum::{
     Router,
 };
 use serde::{Serialize, Deserialize};
-use utoipa::{OpenApi, ToSchema, IntoParams};
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -23,41 +22,32 @@ use crate::model::file::writer::Writer;
 use crate::util::{ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 struct WorkspaceResponse {
     workspace_list: Vec<FileWorkspaceInfo>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 struct LoginInfoResponse {
     access_token: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Serialize, Deserialize)]
 struct WorkspacePatchParams {
     name: String,
 }
 
-#[derive(Deserialize, ToSchema, IntoParams)]
+#[derive(Deserialize)]
 struct LoginWorkspaceParams {
     workspace_id: String,
 }
 
-#[derive(Deserialize, ToSchema, IntoParams)]
+#[derive(Deserialize)]
 struct IconMultipartBody {
     #[allow(dead_code)]
-    #[schema(value_type = String, format = Binary)]
     icon: Vec<u8>,
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/workspaces",
-    responses(
-        (status = 200, description = "All workspaces", body = WorkspaceResponse)
-    ),
-    tag="workspace",
-)]
 async fn get_workspaces(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
 ) -> (StatusCode, ApiResponse<WorkspaceResponse>) {
@@ -77,15 +67,6 @@ async fn get_workspaces(
     (StatusCode::OK, Ok(Json(res)))
 }
 
-#[utoipa::path(
-    patch,
-    path = "/api/v1/workspaces",
-    params(WorkspacePatchParams),
-    responses(
-        (status = 204, description = "patch workspace name")
-    ),
-    tag="workspace",
-)]
 async fn patch_workspaces<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -127,14 +108,6 @@ async fn patch_workspaces<T: Writer>(
     (StatusCode::NO_CONTENT, Ok(Json(())))
 }
 
-#[utoipa::path(
-    delete,
-    path = "/api/v1/workspaces",
-    responses(
-        (status = 204, description = "Success to delete workspace"),
-    ),
-    tag="workspace",
-)]
 async fn delete_workspaces<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -175,16 +148,6 @@ async fn delete_workspaces<T: Writer>(
     (StatusCode::NO_CONTENT, Ok(Json(())))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/workspaces/login",
-    params(LoginWorkspaceParams),
-    responses(
-        (status = 200, description = "Login success", body = LoginInfoResponse),
-        (status = 400, description = "Login failed", body = BasicApiError),
-    ),
-    tag="workspace",
-)]
 async fn login_workspace(
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Json(body): Json<LoginWorkspaceParams>,
@@ -221,15 +184,6 @@ async fn login_workspace(
     (StatusCode::OK, Ok(Json(LoginInfoResponse { access_token: auth.access_token })))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/workspaces/icon",
-    responses(
-        (status = 200, description = "Icon image", content_type="image/*"),
-        (status = 404, description = "Icon isn't uploaded yet"),
-    ),
-    tag="workspace/icon",
-)]
 async fn get_workspaces_icon(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -256,16 +210,6 @@ async fn get_workspaces_icon(
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/workspaces/icon",
-    request_body(content = IconMultipartBody, content_type="multipart/form-data"),
-    responses(
-        (status = 201, description = "Icon upload success"),
-        (status = 400, description = "Icon upload failed", body = BasicApiError),
-    ),
-    tag="workspace/icon",
-)]
 async fn post_workspaces_icon<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -331,30 +275,6 @@ async fn post_workspaces_icon<T: Writer>(
 
     (StatusCode::CREATED, Ok(Json(())))
 }
-
-#[derive(OpenApi)]
-#[openapi(
-    paths(
-        get_workspaces,
-        patch_workspaces,
-        delete_workspaces,
-        get_workspaces_icon,
-        post_workspaces_icon,
-        login_workspace,
-    ),
-    components(
-        schemas(
-            WorkspaceResponse,
-            FileWorkspaceInfo,
-            WorkspacePatchParams,
-            LoginWorkspaceParams,
-            IconMultipartBody,
-            LoginInfoResponse,
-            BasicApiError,
-        ),
-    ),
-)]
-pub struct ApiDoc;
 
 pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
     let noauth_endpoints = Router::new()

@@ -3,8 +3,6 @@ use axum::{
     extract::{Extension, DefaultBodyLimit},
     Router,
 };
-use utoipa_swagger_ui::SwaggerUi;
-use utoipa::OpenApi;
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -248,7 +246,6 @@ async fn main() {
         .nest("/images", controller::images::router(conn.clone()))
         .nest("/tags", controller::tags::router::<FileWriter>(conn.clone()));
     let app = Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", controller::workspaces::ApiDoc::openapi()))
         .nest("/api/v1", v1_api_router)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(Extension(conn))

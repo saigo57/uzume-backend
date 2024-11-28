@@ -27,13 +27,6 @@ struct ImagesResponse {
     images: Vec<DBImageInfo>,
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/images",
-    responses(
-        (status = 200, description = "All images", body = ImagesResponse)
-    )
-)]
 async fn get_images(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,

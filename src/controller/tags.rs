@@ -27,13 +27,6 @@ struct TagParams {
     name: String,
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/tags",
-    responses(
-        (status = 200, description = "All tags", body = TagsResponse)
-    )
-)]
 async fn get_tags(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -54,13 +47,6 @@ async fn get_tags(
     (StatusCode::OK, Ok(Json(tr)))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/tags",
-    responses(
-        (status = 200, description = "All tags", body = TagsResponse)
-    )
-)]
 async fn post_tags<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
