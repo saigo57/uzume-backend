@@ -209,6 +209,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BasicError"
+  /api/v1/tag/{id}/favorite:
+    post:
+      summary: "Tagをお気に入りに登録"
+      description: ""
+      tags: ["Tag"]
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      responses:
+        200:
+          description: "更新後のTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        404:
+          description: "対象のtagが存在しない"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicError"
+    delete:
+      summary: "Tagをお気に入りから削除"
+      description: ""
+      tags: ["Tag"]
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      responses:
+        200:
+          description: "更新後のTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        404:
+          description: "対象のtagが存在しない"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicError"
+
 components:
   securitySchemes:
     basicAuth:
