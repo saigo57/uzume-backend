@@ -48,11 +48,7 @@ impl Tag {
             favorite: false,
             tag_group_id: "".to_string(),
         };
-        tag.save(conn)?;
-        Ok(tag)
-    }
 
-    pub fn save(&self, conn: &Connection) -> Result<(), Box<dyn Error>> {
         conn.execute("
             INSERT INTO tag (
                 workspace_id
@@ -62,10 +58,33 @@ impl Tag {
                 ,tag_group_id
             ) VALUES (?1, ?2, ?3, ?4, ?5)
         ", params![
+            tag.workspace_id,
+            tag.tag_id,
+            tag.name,
+            tag.favorite_to_i(),
+            tag.tag_group_id,
+        ])?;
+
+        Ok(tag)
+    }
+    
+    pub fn favorite_to_i(&self) -> i32 {
+        if self.favorite { 1 } else { 0 }
+    }
+    
+    pub fn save(&self, conn: &Connection) -> Result<(), Box<dyn Error>> {
+        conn.execute("
+            UPDATE tag
+            SET
+                name = ?3
+                ,favorite = ?4
+                ,tag_group_id = ?5
+            WHERE workspace_id = ?1 AND tag_id = ?2
+        ", params![
             self.workspace_id,
             self.tag_id,
             self.name,
-            if self.favorite { 1 } else { 0 },
+            self.favorite_to_i(),
             self.tag_group_id,
         ])?;
         Ok(())

@@ -129,6 +129,33 @@ paths:
           description: "成功"
         401:
           $ref: "#/components/responses/UnauthorizedError"
+  /api/v1/tag:
+    get:
+      summary: "Tag一覧を取得"
+      description: ""
+      tags: ["Tag"]
+      security:
+        - basicAuth: []
+      responses:
+        200:
+          description: "Tag一覧"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tags"
+    post:
+      summary: "Tagを新規作成"
+      description: ""
+      tags: ["Tag"]
+      security:
+        - basicAuth: []
+      responses:
+        201:
+          description: "作成したTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
 
 
 components:
@@ -153,11 +180,36 @@ components:
           type: string
           example: "/path/to/workspace"
         workspace_id:
-          type: integer
+          type: string
           example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
         name:
           type: string
           example: "ワークスペース名"
+    Tags:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+    Tag:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+          example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        tag_id:
+          type: string
+          example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        name:
+          type: string
+          example: "タグ名"
+        favorite:
+          type: boolean
+          example: true
+        tag_group_id:
+          type: string
+          example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     BasicError:
       type: object
       properties:

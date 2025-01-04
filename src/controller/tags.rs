@@ -118,31 +118,83 @@ mod tests {
     use std::path::Path;
     use crate::test_util::TestUtil;
 
-    #[tokio::test]
-    async fn test_post_tags() {
-        let tu = TestUtil::new().await;
-        let workspace_path = Path::new(&tu.workspace_path);
+    mod test_get_tags {
+        use super::*;
 
-        let body = Json(TagParams { name: "new_tag".to_string() });
-        let (status, _result) = post_tags(
-            Extension(tu.workspace_id.to_string()),
-            Extension(tu.conn.clone()),
-            Extension(tu.writer.clone()),
-            body
-        ).await;
-        assert_eq!(status, StatusCode::CREATED);
+        #[tokio::test]
+        async fn test_get_tags() {
+            let tu = TestUtil::new().await;
 
-        let history = tu.writer.history.lock().unwrap();
-        assert_eq!(history.len(), 1);
-        assert_eq!(history[0].path, workspace_path.join("tags.json").to_str().unwrap());
+            let mut tags = Vec::new();
+            {
+                let conn = tu.conn.lock().await;
+                let tag1 = DBTag::create(&conn, tu.workspace_id.clone(), "tag1".to_string()).unwrap();
+                let mut tag2 = DBTag::create(&conn, tu.workspace_id.clone(), "tag2".to_string()).unwrap();
+                tag2.favorite = true;
+                tag2.save(&conn).unwrap();
 
-        let tags: FileTags = serde_json::from_str(&history[0].data).unwrap();
-        assert_eq!(tags.tags.len(), 1);
+                tags.push(tag1);
+                tags.push(tag2);
+            }
 
-        let tag = tags.tags.first().unwrap();
-        assert_eq!(tag.tag_id.len(), 36);
-        assert_eq!(tag.name, "new_tag");
-        assert!(!tag.favorite);
-        assert_eq!(tag.tag_group_id.len(), 0);
+            let (status, result) = get_tags(
+                Extension(tu.workspace_id.to_string()),
+                Extension(tu.conn.clone())
+            ).await;
+            assert_eq!(status, StatusCode::OK);
+            let result = result.unwrap();
+            assert_eq!(result.tags.len(), 2);
+            assert_eq!(result.tags[0].workspace_id, tu.workspace_id);
+            assert_eq!(result.tags[0].tag_id, tags[0].tag_id);
+            assert_eq!(result.tags[0].name, tags[0].name);
+            assert_eq!(result.tags[0].favorite, tags[0].favorite);
+            assert_eq!(result.tags[1].workspace_id, tu.workspace_id);
+            assert_eq!(result.tags[1].tag_id, tags[1].tag_id);
+            assert_eq!(result.tags[1].name, tags[1].name);
+            assert_eq!(result.tags[1].favorite, tags[1].favorite);
+        }
+    }
+    
+    mod test_post_tags {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_post_tags() {
+            let tu = TestUtil::new().await;
+            let workspace_path = Path::new(&tu.workspace_path);
+
+            let body = Json(TagParams { name: "new_tag".to_string() });
+            let (status, _result) = post_tags(
+                Extension(tu.workspace_id.to_string()),
+                Extension(tu.conn.clone()),
+                Extension(tu.writer.clone()),
+                body
+            ).await;
+            assert_eq!(status, StatusCode::CREATED);
+            
+            {
+                let conn = tu.conn.lock().await;
+                let db_tags = DBTag::get_all(&conn, tu.workspace_id.clone()).unwrap();
+                assert_eq!(db_tags.len(), 1);
+                assert_eq!(db_tags[0].workspace_id, tu.workspace_id);
+                assert_eq!(db_tags[0].tag_id.len(), 36);
+                assert_eq!(db_tags[0].name, "new_tag");
+                assert!(!db_tags[0].favorite);
+                assert_eq!(db_tags[0].tag_group_id, "");
+            }
+
+            let history = tu.writer.history.lock().unwrap();
+            assert_eq!(history.len(), 1);
+            assert_eq!(history[0].path, workspace_path.join("tags.json").to_str().unwrap());
+
+            let tags: FileTags = serde_json::from_str(&history[0].data).unwrap();
+            assert_eq!(tags.tags.len(), 1);
+
+            let tag = tags.tags.first().unwrap();
+            assert_eq!(tag.tag_id.len(), 36);
+            assert_eq!(tag.name, "new_tag");
+            assert!(!tag.favorite);
+            assert_eq!(tag.tag_group_id.len(), 0);
+        }
     }
 }
