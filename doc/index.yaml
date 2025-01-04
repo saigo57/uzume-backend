@@ -183,7 +183,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BasicError"
-
+    delete:
+      summary: "Tagを削除"
+      description: ""
+      tags: ["Tag"]
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      responses:
+        200:
+          description: "削除したTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        404:
+          description: "対象のtagが存在しない"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicError"
 components:
   securitySchemes:
     basicAuth:

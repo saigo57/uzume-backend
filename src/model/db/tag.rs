@@ -116,4 +116,15 @@ impl Tag {
         ])?;
         Ok(())
     }
+
+    pub fn delete(&self, conn: &Connection) -> Result<(), Box<dyn Error>> {
+        conn.execute("
+            DELETE FROM tag
+            WHERE workspace_id = ?1 AND tag_id = ?2
+        ", params![
+            self.workspace_id,
+            self.tag_id,
+        ])?;
+        Ok(())
+    }
 }
