@@ -2,7 +2,7 @@ use std::error::Error;
 use serde::{Serialize, Deserialize};
 use rusqlite::{params, Connection};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tag {
     pub workspace_id: String,
 
@@ -16,17 +16,21 @@ pub struct Tag {
 }
 
 impl Tag {
+    const TAG_SELECT: &str = "
+        SELECT
+            workspace_id
+            ,tag_id
+            ,name
+            ,favorite
+            ,tag_group_id
+    ";
+
     pub fn get_all(conn: &Connection, workspace_id: String) -> Result<Vec<Self>, Box<dyn Error>> {
-        let mut stmt = conn.prepare("
-            SELECT
-                workspace_id
-                ,tag_id
-                ,name
-                ,favorite
-                ,tag_group_id
+        let mut stmt = conn.prepare(&format!("
+            {}
             FROM tag
             WHERE workspace_id = ?1
-        ")?;
+        ", Self::TAG_SELECT))?;
         let tags: Vec::<Tag> = stmt.query_map(params![workspace_id], |row| {
             let favorite: i32 = row.get(3)?;
             Ok(Tag {
@@ -38,6 +42,29 @@ impl Tag {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(tags)
+    }
+    
+    pub fn find(conn: &Connection, workspace_id: String, tag_id: String) -> Result<Option<Self>, Box<dyn Error>> {
+        let mut stmt = conn.prepare(&format!("
+            {}
+            FROM tag
+            WHERE workspace_id = ?1 AND tag_id = ?2
+        ", Self::TAG_SELECT))?;
+        let tag = stmt.query_map(params![workspace_id, tag_id], |row| {
+            let favorite: i32 = row.get(3)?;
+            Ok(Tag {
+                workspace_id: row.get(0)?,
+                tag_id: row.get(1)?,
+                name: row.get(2)?,
+                favorite: favorite != 0,
+                tag_group_id: row.get(4)?,
+            })
+        })?.next();
+        match tag {
+            Some(Ok(tag)) => Ok(Some(tag)),
+            Some(Err(e)) => Err(Box::new(e)),
+            None => Ok(None),
+        }
     }
 
     pub fn create(conn: &Connection, workspace_id: String, name: String) -> Result<Self, Box<dyn Error>> {
