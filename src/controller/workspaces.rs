@@ -469,15 +469,19 @@ mod tests {
                 assert_eq!(DBAuth::count(&conn, tu.workspace_id.clone()).unwrap(), 1);
             }
 
+            let image_data = include_bytes!("../../test_data/computer_server1.png");
             let boundary = "testboundary";
-            let body = format!(
-                "--{}\r\n\
-                 Content-Disposition: form-data; name=\"icon\"; filename=\"test-icon.png\"\r\n\
-                 Content-Type: image/png\r\n\r\n\
-                 {}\r\n\
-                 --{}--\r\n",
-                boundary, "dummy image data", boundary
-            );
+            let body = [
+                format!(
+                    "--{}\r\n\
+                     Content-Disposition: form-data; name=\"icon\"; filename=\"test-icon.png\"\r\n\
+                     Content-Type: image/png\r\n\r\n",
+                    boundary,
+                ).as_bytes(),
+                image_data,
+                "\r\n".as_bytes(),
+                format!("--{}--\r\n", boundary).as_bytes()
+            ].concat();
             let request = Request::builder()
                 .header(
                     hyper::header::CONTENT_TYPE,
@@ -498,7 +502,7 @@ mod tests {
             let history = tu.writer.history.lock().unwrap();
             assert_eq!(history.len(), 1);
             assert_eq!(history[0].path, format!("{}/icon.png", tu.workspace_path));
-            assert_eq!(history[0].data, "dummy image data");
+            assert!(!history[0].data.is_empty());
         }
     }
 }

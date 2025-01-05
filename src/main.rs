@@ -243,7 +243,7 @@ async fn main() {
     let writer = FileWriter;
     let v1_api_router = Router::new()
         .nest("/workspaces", controller::workspaces::router::<FileWriter>(conn.clone()))
-        .nest("/images", controller::images::router(conn.clone()))
+        .nest("/images", controller::images::router::<FileWriter>(conn.clone()))
         .nest("/tags", controller::tags::router::<FileWriter>(conn.clone()));
     let app = Router::new()
         .nest("/api/v1", v1_api_router)

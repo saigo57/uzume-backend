@@ -129,6 +129,29 @@ paths:
           description: "成功"
         401:
           $ref: "#/components/responses/UnauthorizedError"
+  /api/v1/image:
+    post:
+      summary: "画像をアップロード"
+      description: ""
+      tags: ["Image"]
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                icon:
+                  type: string
+                  format: binary
+                  description: "画像"
+      responses:
+        201:
+          description: "成功"
+        401:
+          $ref: "#/components/responses/UnauthorizedError"
   /api/v1/tag:
     get:
       summary: "Tag一覧を取得"
@@ -149,6 +172,16 @@ paths:
       tags: ["Tag"]
       security:
         - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "タグ名"
       responses:
         201:
           description: "作成したTag"
@@ -163,6 +196,16 @@ paths:
       tags: ["Tag"]
       security:
         - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "タグ名"
       parameters:
         - name: id
           in: path
