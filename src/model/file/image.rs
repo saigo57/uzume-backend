@@ -45,7 +45,7 @@ impl Image {
         let workspace_dir_path = Self::get_workspace_path(conn, workspace_id)?;
         let workspace_dir_path = Path::new(&workspace_dir_path);
         let images_dir_path = workspace_dir_path.join("images");
-        let image_dir_path = images_dir_path.join(&db_image.image_id);
+        let image_dir_path = images_dir_path.join(format!("{}.image", &db_image.image_id));
         let image_original_file_path = image_dir_path.join(file_name);
         let image_thumbneil_file_path = image_dir_path.join(Self::thumbneil_file_name(file_name)?);
         

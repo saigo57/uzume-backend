@@ -32,7 +32,7 @@ impl ImageInfo {
         let workspace_path = workspace.clone().path.clone();
         let workspace_path = std::path::Path::new(&workspace_path);
         let images_dir_path = workspace_path.join("images");
-        let image_info_path = images_dir_path.join(&image_info.image_id).join("imageinfo.json");
+        let image_info_path = images_dir_path.join(format!("{}.image", &image_info.image_id)).join("imageinfo.json");
         
         let image_info = ImageInfo {
             image_id: image_info.image_id.clone(),

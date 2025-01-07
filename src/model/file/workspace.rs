@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use crate::model::db::config::Config as DBConfig;
 use crate::model::file::writer::Writer;
+use crate::model::entity::image::Image;
 
 #[derive(Debug)]
 struct WorkspaceError {
@@ -25,11 +26,6 @@ impl std::error::Error for WorkspaceError {}
 
 
 // image系の実装時にそっちの構造体を使ったほうがいいかも
-pub struct Image {
-    pub data: Vec<u8>,
-    pub ext: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub workspace_id: String,

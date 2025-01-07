@@ -3,8 +3,10 @@ use axum::{
     self,
     routing::{get, post},
     http::StatusCode,
-    extract::{Extension, Multipart},
+    extract::{Extension, Multipart, Path},
+    response::{Response, IntoResponse},
     extract::Query,
+    body::Body,
     Json,
     Router,
 };
@@ -20,6 +22,7 @@ use crate::model::file::image::Image as FileImage;
 use crate::model::file::image_info::ImageInfo as FileImageInfo;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::model::file::writer::Writer;
+use crate::model::entity::image::Image as ImageEntity;
 use crate::util::{ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
 
@@ -171,6 +174,57 @@ async fn post_images<T: Writer>(
     (StatusCode::CREATED, Ok(Json(())))
 }
 
+async fn get_image(
+    Extension(workspace_id): Extension<String>,
+    Extension(conn): Extension<Arc<Mutex<Connection>>>,
+    Path(id): Path<String>,
+) -> Response {
+    let conn = conn.lock().await;
+    
+    log::info!("get image: {}", id);
+    let image = match DBImageInfo::find(&conn, &workspace_id, &id) {
+        Ok(image) => image,
+        Err(err) => {
+            log::error!("find image error: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(BasicApiError { error_message: "find image error.".to_string() })
+            )
+            .into_response();
+        },
+    };
+    
+    let image = match image {
+        Some(image) => image,
+        None => {
+            log::info!("image not found: {}", id);
+            return (
+                StatusCode::NOT_FOUND,
+                Json(BasicApiError { error_message: "image not found.".to_string() })
+            )
+            .into_response();
+        },
+    };
+    
+    match image.get_image(&conn, &workspace_id) {
+        Ok(image) => {
+            axum::response::Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", format!("image/{}", image.ext))
+                .body(Body::from(image.data))
+                .unwrap()
+        },
+        Err(err) => {
+            log::info!("get image: {}", err);
+            return (
+                StatusCode::NOT_FOUND,
+                ()
+            )
+            .into_response();
+        },
+    }
+}
+
 // GET    /images?page=1
 // *POST   /images
 // GET    /images/{id}/file?image_size=original
@@ -181,6 +235,7 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
     Router::new()
         .route("/", get(get_images))
         .route("/", post(post_images::<T>))
+        .route("/:id/file", get(get_image))
         .route_layer(axum::middleware::from_fn_with_state(conn.clone(), auth))
 }
 
@@ -250,7 +305,7 @@ mod tests {
                 assert!(history[0].path.ends_with("/imageinfo.json"));
                 let file_result: FileImageInfo = serde_json::from_str(&history[0].data).unwrap();
                 assert_eq!(file_result.image_id.len(), 36);
-                assert_eq!(file_result.file_name, "computer_server1.png");
+                assert_eq!(file_result.file_name, "computer_server1");
                 assert_eq!(file_result.ext, "png");
                 assert_eq!(file_result.width, 338);
                 assert_eq!(file_result.height, 400);
