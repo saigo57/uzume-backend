@@ -1,32 +1,14 @@
-use std::path::Path;
 use std::error::Error;
 use serde::{Serialize, Deserialize};
 use rusqlite::{params, Connection};
-use image::DynamicImage;
-use chrono::prelude::*;
-use crate::model::file;
+use image::ImageReader;
+use std::io::Cursor;
 use crate::model::file::image::Image as FileImage;
-use crate::model::db::config::Config as DBConfig;
+use crate::model::file::image_info::ImageInfo as FileImageInfo;
+use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::entity::image::Image;
-
-#[derive(Debug)]
-struct ImageInfoError {
-    pub message: String
-}
-
-impl ImageInfoError  {
-    pub fn new(message: String) -> Self {
-        Self { message }
-    }
-}
-
-impl std::fmt::Display for ImageInfoError  {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "ImageInfoError: {}", self.message)
-    }
-}
-
-impl std::error::Error for ImageInfoError  {}
+use crate::model::file::writer::Writer;
+use crate::util::{jst_time_string, ModelError};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ImageInfo {
@@ -46,32 +28,27 @@ pub struct ImageInfo {
 }
 
 impl ImageInfo {
-    pub fn create(conn: &Connection, workspace_id: &str, file_name: &str, image_reader: &DynamicImage) -> Result<Self, Box<dyn Error>> {
-        let path = std::path::Path::new(&file_name);
-        let ext_str = match path.extension() {
-            Some(ext) => ext.to_str(),
-            None => None,
-        };
-        let ext_str = match ext_str {
-            Some(ext) => ext,
-            None => {
-                log::error!("get extension error.");
-                return Err(Box::new(ImageInfoError::new("get extension error.".to_string())));
-            },
-        };
-        
-        let now = Utc::now();
-        let jst_time = now.with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).expect("Invalid offset"));
-        
-        let file_name_without_ext = file_name.trim_end_matches(&format!(".{}", ext_str));
+    pub fn create<T: Writer>(
+        conn: &Connection,
+        writer: &mut T,
+        workspace_info: &WorkspaceInfo,
+        file_name: &str,
+        image_data: &[u8],
+    ) -> Result<Self, Box<dyn Error>> {
+        let (file_name_part, ext) = FileImageInfo::split_file_name(file_name)?;
 
+        let cursor = Cursor::new(image_data);
+        let image_reader = ImageReader::new(cursor)
+            .with_guessed_format()?
+            .decode()?;
+        
         let image = Self {
             image_id: uuid::Uuid::new_v4().to_string(),
-            file_name: file_name_without_ext.to_string(),
-            ext: ext_str.to_string(),
+            file_name: file_name_part,
+            ext,
             width: image_reader.width(),
             height: image_reader.height(),
-            created_at: jst_time.format("%Y-%m-%dT%H:%M:%S%.f%:z").to_string(),
+            created_at: jst_time_string()?,
             tags: vec![],
         };
         
@@ -86,7 +63,7 @@ impl ImageInfo {
                 ,created_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         ", params![
-            workspace_id,
+            workspace_info.workspace_id,
             image.image_id,
             image.file_name,
             image.ext,
@@ -94,6 +71,21 @@ impl ImageInfo {
             image.height,
             image.created_at,
         ])?;
+
+        FileImageInfo::save_from_db(
+            &mut writer.clone(),
+            workspace_info,
+            &image
+        )?;
+        FileImage::save(
+            conn,
+            &mut writer.clone(),
+            &workspace_info.workspace_id,
+            &image,
+            file_name,
+            &image_reader,
+            image_data,
+        )?;
         
         Ok(image)
     }
@@ -160,7 +152,7 @@ impl ImageInfo {
     }
 
     pub fn get_image(&self, conn: &Connection, workspace_id: &str) -> Result<Image, Box<dyn std::error::Error>> {
-        let image_dir_path = self.get_image_dir_path(&conn, &workspace_id)?;
+        let image_dir_path = FileImageInfo::get_image_dir_path(conn, workspace_id, &self.image_id)?;
         let image_original_file_path = image_dir_path.join(format!("{}.{}", self.file_name, self.ext));
         //let image_thumbneil_file_path = image_dir_path.join(FileImage::thumbneil_file_name(&self.file_name)?);
         log::info!("image_original_file_path: {:?}", image_original_file_path);
@@ -174,32 +166,9 @@ impl ImageInfo {
             Some(ext) => ext,
             None => {
                 log::error!("get extension error.");
-                return Err(Box::new(ImageInfoError::new("get extension error".to_string())));
+                return Err(Box::new(ModelError::new("get extension error".to_string())));
             },
         };
         Ok(Image { data, ext: ext.to_string() })
-    }
-    
-    pub fn get_image_dir_path(&self, conn: &Connection, workspace_id: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
-        let workspace_dir_path = Self::get_workspace_path(conn, workspace_id)?;
-        let workspace_dir_path = Path::new(&workspace_dir_path);
-        let images_dir_path = workspace_dir_path.join("images");
-        let image_dir_path = images_dir_path.join(format!("{}.image", self.image_id));
-        
-        Ok(image_dir_path)
-    }
-
-    pub fn get_workspace_path(conn: &Connection, workspace_id: &str) -> Result<String, Box<dyn std::error::Error>> {
-        match DBConfig::find(conn, workspace_id.to_string()) {
-            Ok(Some(config)) => Ok(config.path),
-            Ok(None) => {
-                log::error!("workspace not found.");
-                Err(Box::new(ImageInfoError::new("workspace not found.".to_string())))
-            },
-            Err(err) => {
-                log::error!("find workspace error: {}", err);
-                Err(Box::new(ImageInfoError::new("find workspace error.".to_string())))
-            },
-        }
     }
 }

@@ -6,7 +6,6 @@ use axum::{
     extract::{Extension, Multipart, Path},
     response::{Response, IntoResponse},
     extract::Query,
-    body::Body,
     Json,
     Router,
 };
@@ -22,8 +21,7 @@ use crate::model::file::image::Image as FileImage;
 use crate::model::file::image_info::ImageInfo as FileImageInfo;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::model::file::writer::Writer;
-use crate::model::entity::image::Image as ImageEntity;
-use crate::util::{ApiResponse, BasicApiError};
+use crate::util::{build_image_response, ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
 
 #[derive(Serialize, Deserialize)]
@@ -119,17 +117,6 @@ async fn post_images<T: Writer>(
         },
     };
 
-    let db_image = match DBImageInfo::create(&conn, &workspace_id, &image_field.file_name, &image_reader) {
-        Ok(db_image) => { db_image },
-        Err(err) => {
-            log::error!("save icon error: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "save icon error.".to_string() }))
-            );
-        },
-    };
-    
     let workspace = match DBConfig::find(&conn, workspace_id.clone()) {
         Ok(workspace) => workspace,
         Err(err) => {
@@ -149,27 +136,22 @@ async fn post_images<T: Writer>(
         }
     };
 
-    match FileImageInfo::save_from_db(&mut writer.clone(), &workspace, &db_image) {
-        Ok(_) => {},
+    let db_image = match DBImageInfo::create(
+        &conn,
+        &mut writer.clone(),
+        &workspace,
+        &image_field.file_name,
+        &image_field.data,
+    ) {
+        Ok(db_image) => { db_image },
         Err(err) => {
-            log::error!("save image error: {}", err);
+            log::error!("save icon error: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "save image error.".to_string() }))
+                Err(Json(BasicApiError { error_message: "save icon error.".to_string() }))
             );
         },
-    }
-    
-    match FileImage::save(&conn, &mut writer.clone(), &workspace_id, &db_image, &image_field.file_name, &image_reader, &image_field.data) {
-        Ok(_) => {},
-        Err(err) => {
-            log::error!("save image error: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "save image error.".to_string() }))
-            );
-        },
-    }
+    };
     
     (StatusCode::CREATED, Ok(Json(())))
 }
@@ -206,19 +188,25 @@ async fn get_image(
         },
     };
     
-    match image.get_image(&conn, &workspace_id) {
-        Ok(image) => {
-            axum::response::Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", format!("image/{}", image.ext))
-                .body(Body::from(image.data))
-                .unwrap()
-        },
+    let image = match image.get_image(&conn, &workspace_id) {
+        Ok(image) => image,
         Err(err) => {
             log::info!("get image: {}", err);
             return (
                 StatusCode::NOT_FOUND,
                 ()
+            )
+            .into_response();
+        },
+    };
+
+    match build_image_response(&image) {
+        Ok(res) => res,
+        Err(err) => {
+            log::info!("get image: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(BasicApiError { error_message: "get image error.".to_string() })
             )
             .into_response();
         },
@@ -312,9 +300,9 @@ mod tests {
                 assert!(is_iso8601_format(file_result.created_at.as_str()));
                 assert!(file_result.tags.is_empty());
 
-                assert!(history[1].path.ends_with("/computer_server1.png"));
+                assert!(history[1].path.ends_with(".image/computer_server1.png"));
                 assert!(!history[1].data.is_empty());
-                assert!(history[2].path.ends_with("/computer_server1_thumb.jpg"));
+                assert!(history[2].path.ends_with(".image/computer_server1_thumb.jpg"));
                 assert!(!history[2].data.is_empty());
                 
                 assert!(history[1].data.len() > history[2].data.len());

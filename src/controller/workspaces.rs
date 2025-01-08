@@ -4,7 +4,6 @@ use axum::{
     http::StatusCode,
     extract::{Extension, Multipart},
     response::{Response, IntoResponse},
-    body::Body,
     Json,
     Router,
 };
@@ -19,7 +18,7 @@ use crate::model::file::workspace::Workspace as FileWorkspace;
 use crate::model::db::config::Config as DBConfig;
 use crate::model::db::auth::Auth as DBAuth;
 use crate::model::file::writer::Writer;
-use crate::util::{ApiResponse, BasicApiError};
+use crate::util::{build_image_response, ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
 
 #[derive(Debug, Serialize)]
@@ -190,20 +189,25 @@ async fn get_workspaces_icon(
 ) -> Response {
     let conn = conn.lock().await;
     
-    match FileWorkspace::get_icon_image(&conn, &workspace_id) {
-        Ok(image) => {
-            axum::response::Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", format!("image/{}", image.ext))
-                .body(Body::from(image.data))
-                .unwrap()
-        },
+    let icon_image = match FileWorkspace::get_icon_image(&conn, &workspace_id) {
+        Ok(icon_image) => icon_image,
         Err(err) => {
-            // まだアイコンが設定されていない場合は404を返す
             log::info!("get icon image: {}", err);
             return (
                 StatusCode::NOT_FOUND,
                 ()
+            )
+            .into_response();
+        },
+    };
+
+    match build_image_response(&icon_image) {
+        Ok(res) => res,
+        Err(err) => {
+            log::info!("get icon image: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(BasicApiError { error_message: "get image error.".to_string() })
             )
             .into_response();
         },

@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use rusqlite::{Connection, params};
 use crate::model::file::workspace_info::WorkspaceInfo;
+use crate::util::ModelError;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -23,6 +24,20 @@ impl Config {
         })?.collect::<Result<Vec<_>, _>>()?;
 
         Ok(workspace_list)
+    }
+
+    pub fn get_workspace_path(conn: &Connection, workspace_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+        match Self::find(conn, workspace_id.to_string()) {
+            Ok(Some(config)) => Ok(config.path),
+            Ok(None) => {
+                log::error!("workspace not found.");
+                Err(Box::new(ModelError::new("workspace not found.".to_string())))
+            },
+            Err(err) => {
+                log::error!("find workspace error: {}", err);
+                Err(Box::new(ModelError::new("find workspace error.".to_string())))
+            },
+        }
     }
 
     pub fn find(conn: &Connection, workspace_id: String) -> Result<Option<WorkspaceInfo>, rusqlite::Error> {
