@@ -1,9 +1,7 @@
-use std::path::Path;
 use image::imageops::FilterType;
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use image::{DynamicImage, ImageFormat};
-use crate::model::db::config::Config as DBConfig;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::model::file::image_info::ImageInfo as FileImageInfo;
 use crate::model::file::writer::Writer;
@@ -20,13 +18,12 @@ impl Image {
         writer: &mut T,
         workspace_id: &str,
         db_image: &DBImageInfo,
-        file_name: &str,
         image_reader: &DynamicImage,
         data: &[u8],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let image_dir_path = FileImageInfo::get_image_dir_path(conn, workspace_id, &db_image.image_id)?;
-        let image_original_file_path = image_dir_path.join(file_name);
-        let image_thumbneil_file_path = image_dir_path.join(FileImageInfo::thumbneil_file_name(file_name)?);
+        let image_original_file_path = image_dir_path.join(&db_image.get_file_name().0);
+        let image_thumbneil_file_path = image_dir_path.join(&db_image.get_thumbnail_file_name().0);
         
         writer.write_file(image_original_file_path, data)?;
         

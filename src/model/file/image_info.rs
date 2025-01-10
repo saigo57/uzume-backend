@@ -2,15 +2,21 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use crate::model::db::config::Config as DBConfig;
-use crate::model::db::image_info::ImageInfo as DBImageInfo;
+use crate::model::db::image_info::{ImageInfo as DBImageInfo};
 use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::file::writer::Writer;
 use crate::util::ModelError;
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct FullFileName(pub String);
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct FileStem(pub String);
+
 
 #[derive(Serialize, Deserialize)]
 pub struct ImageInfo {
     pub image_id: String,
-    pub file_name: String,
+    pub file_name: FileStem,
     pub ext: String,
     pub width: u32,
     pub height: u32,
@@ -19,14 +25,16 @@ pub struct ImageInfo {
 }
 
 impl ImageInfo {
-    pub fn get_file_image_info_path(workspace: &WorkspaceInfo) -> PathBuf {
-        Path::new(&workspace.path).join("imageinfo.json")
+    pub fn get_file_image_info_path(&self, workspace: &WorkspaceInfo) -> PathBuf {
+        Path::new(&workspace.path).join("images").join(self.image_dir_name()).join("imageinfo.json")
+    }
+    
+    pub fn image_dir_name(&self) -> String {
+        format!("{}.image", self.image_id)
     }
 
-    pub fn thumbneil_file_name(file_name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let (file_name_part, _) = Self::split_file_name(file_name)?;
-        let file_name = format!("{}_thumb.jpg", file_name_part);
-        Ok(file_name)
+    pub fn thumbneil_file_name(file_name_part: &FileStem) -> FullFileName {
+        FullFileName(format!("{}_thumb.jpg", file_name_part.0))
     }
 
     pub fn get_image_dir_path(conn: &Connection, workspace_id: &str, image_id: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
@@ -56,12 +64,12 @@ impl ImageInfo {
             tags: image_info.tags.clone(),
         };
         let json = image_info.to_json()?;
-        writer.save(Self::get_file_image_info_path(workspace), json)?;
+        writer.save(image_info.get_file_image_info_path(workspace), json)?;
         Ok(())
     }
     
-    pub fn split_file_name(file_name: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
-        let path = std::path::Path::new(&file_name);
+    pub fn split_file_name(file_name: &FullFileName) -> Result<(FileStem, String), Box<dyn std::error::Error>> {
+        let path = std::path::Path::new(&file_name.0);
         let ext_str = match path.extension() {
             Some(ext) => ext.to_str(),
             None => None,
@@ -73,9 +81,9 @@ impl ImageInfo {
             },
         };
 
-        let file_name_part = file_name.trim_end_matches(&format!(".{}", ext_str));
+        let file_name_part = file_name.0.trim_end_matches(&format!(".{}", ext_str));
 
-        Ok((file_name_part.to_string(), ext_str.to_string()))
+        Ok((FileStem(file_name_part.to_string()), ext_str.to_string()))
     }
 
     // TODO:共通化できるかも
@@ -91,23 +99,16 @@ mod tests {
     
     #[test]
     fn test_thumbnail_file_name() {
-        let file_name = "test.hoge.jpg";
-        let thumbneil_file_name = ImageInfo::thumbneil_file_name(file_name).unwrap();
-        assert_eq!(thumbneil_file_name, "test.hoge_thumb.jpg");
-    }
-
-    #[test]
-    fn test_thumbnail_file_name_png() {
-        let file_name = "test.hoge.png";
-        let thumbneil_file_name = ImageInfo::thumbneil_file_name(file_name).unwrap();
-        assert_eq!(thumbneil_file_name, "test.hoge_thumb.jpg");
+        let file_name = FileStem("test.hoge".to_string());
+        let thumbneil_file_name = ImageInfo::thumbneil_file_name(&file_name);
+        assert_eq!(thumbneil_file_name, FullFileName("test.hoge_thumb.jpg".to_string()));
     }
 
     #[test]
     fn test_split_file_name() {
-        let file_name = "test.hoge.png";
-        let (file_name_part, ext) = ImageInfo::split_file_name(file_name).unwrap();
-        assert_eq!(file_name_part, "test.hoge");
+        let file_name = FullFileName("test.hoge.png".to_string());
+        let (file_name_part, ext) = ImageInfo::split_file_name(&file_name).unwrap();
+        assert_eq!(file_name_part, FileStem("test.hoge".to_string()));
         assert_eq!(ext, "png");
     }
 }

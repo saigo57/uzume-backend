@@ -52,14 +52,21 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), B
                 Some(path) => path,
                 None => Err("image_info_file_path is None.")?,
             };
-            let image_info = FileImageInfo::load(image_info_file_path)?;
+            let image_info = match FileImageInfo::load(image_info_file_path) {
+                Ok(image_info) => image_info,
+                Err(e) => {
+                    log::error!("load image info error: {}", e);
+                    return Err(format!("load image info error: {}, file_path: {}", e, image_info_file_path))?;
+                }
+            };
+
 
             conn.execute(
                 "INSERT INTO image (workspace_id, image_id, file_name, ext, width, height, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 [
                     workspace.workspace_id.clone(),
                     image_info.image_id,
-                    image_info.file_name,
+                    image_info.file_name.0,
                     image_info.ext,
                     image_info.width.to_string(),
                     image_info.height.to_string(),

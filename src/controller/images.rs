@@ -17,16 +17,29 @@ use image::{ImageReader, DynamicImage};
 use std::io::Cursor;
 use crate::controller::middleware::auth;
 use crate::model::db::config::Config as DBConfig;
-use crate::model::file::image::Image as FileImage;
-use crate::model::file::image_info::ImageInfo as FileImageInfo;
+use crate::model::file::image_info::FullFileName;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::model::file::writer::Writer;
 use crate::util::{build_image_response, ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
 
 #[derive(Serialize, Deserialize)]
-struct GetImageParams {
+struct GetImageListParams {
     page: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum ImageSize {
+    #[serde(rename = "original")]
+    Original,
+    #[serde(rename = "thumbnail")]
+    Thumbnail,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GetImageParams {
+    image_size: Option<ImageSize>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,7 +51,7 @@ struct ImagesResponse {
 async fn get_images(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
-    Query(query): Query<GetImageParams>,
+    Query(query): Query<GetImageListParams>,
 ) -> (StatusCode, ApiResponse<ImagesResponse>) {
     let conn = conn.lock().await;
     // queryを解釈してpage変数を新しく作る。どこかで値がなかった場合は1を入れる
@@ -77,7 +90,7 @@ async fn post_images<T: Writer>(
     mut multipart: Multipart,
 ) -> (StatusCode, ApiResponse<()>) {
     let conn = conn.lock().await;
-    
+
     let multipart_params = match MultipartParams::new(&mut multipart).await {
         Ok(params) => params,
         Err(err) => {
@@ -140,7 +153,7 @@ async fn post_images<T: Writer>(
         &conn,
         &mut writer.clone(),
         &workspace,
-        &image_field.file_name,
+        &FullFileName(image_field.file_name.clone()),
         &image_field.data,
     ) {
         Ok(db_image) => { db_image },
@@ -160,10 +173,12 @@ async fn get_image(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
     Path(id): Path<String>,
+    Query(query): Query<GetImageParams>,
 ) -> Response {
     let conn = conn.lock().await;
+
+    let image_size = query.image_size.unwrap_or(ImageSize::Original);
     
-    log::info!("get image: {}", id);
     let image = match DBImageInfo::find(&conn, &workspace_id, &id) {
         Ok(image) => image,
         Err(err) => {
@@ -188,7 +203,7 @@ async fn get_image(
         },
     };
     
-    let image = match image.get_image(&conn, &workspace_id) {
+    let image = match image.get_image(&conn, &workspace_id, image_size == ImageSize::Thumbnail) {
         Ok(image) => image,
         Err(err) => {
             log::info!("get image: {}", err);
@@ -230,7 +245,9 @@ pub fn router<T: Writer + 'static>(conn: Arc<Mutex<Connection>>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
     use crate::test_util::TestUtil;
+    use crate::model::file::image_info::{ImageInfo as FileImageInfo, FileStem};
 
     mod test_post_images {
         use super::*;
@@ -293,16 +310,19 @@ mod tests {
                 assert!(history[0].path.ends_with("/imageinfo.json"));
                 let file_result: FileImageInfo = serde_json::from_str(&history[0].data).unwrap();
                 assert_eq!(file_result.image_id.len(), 36);
-                assert_eq!(file_result.file_name, "computer_server1");
+                assert_eq!(file_result.file_name, FileStem("computer_server1".to_string()));
                 assert_eq!(file_result.ext, "png");
                 assert_eq!(file_result.width, 338);
                 assert_eq!(file_result.height, 400);
                 assert!(is_iso8601_format(file_result.created_at.as_str()));
                 assert!(file_result.tags.is_empty());
 
-                assert!(history[1].path.ends_with(".image/computer_server1.png"));
+                let re = Regex::new(r"^/path/to/test\.uzume/images/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.image/computer_server1\.png$").unwrap();
+                assert!(re.is_match(&history[1].path));
                 assert!(!history[1].data.is_empty());
-                assert!(history[2].path.ends_with(".image/computer_server1_thumb.jpg"));
+
+                let re = Regex::new(r"^/path/to/test\.uzume/images/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.image/computer_server1_thumb\.jpg$").unwrap();
+                assert!(re.is_match(&history[2].path));
                 assert!(!history[2].data.is_empty());
                 
                 assert!(history[1].data.len() > history[2].data.len());
