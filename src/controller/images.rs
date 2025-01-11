@@ -13,12 +13,11 @@ use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use image::{ImageReader, DynamicImage};
-use std::io::Cursor;
 use crate::controller::middleware::auth;
 use crate::model::db::config::Config as DBConfig;
 use crate::model::file::image_info::FullFileName;
 use crate::model::db::image_info::ImageInfo as DBImageInfo;
+use crate::model::file::workspace_info::WorkspaceInfo as FileWorkspaceInfo;
 use crate::model::file::writer::Writer;
 use crate::util::{build_image_response, ApiResponse, BasicApiError};
 use crate::multipart_params::MultipartParams;
@@ -74,15 +73,6 @@ async fn get_images(
     (StatusCode::OK, Ok(Json(ir)))
 }
 
-fn decode_image_reader(binary_data: &[u8]) -> Result<DynamicImage, image::ImageError> {
-    let cursor = Cursor::new(binary_data);
-    let image = ImageReader::new(cursor)
-        .with_guessed_format()?
-        .decode()?;
-
-    Ok(image)
-}
-
 async fn post_images<T: Writer>(
     Extension(workspace_id): Extension<String>,
     Extension(conn): Extension<Arc<Mutex<Connection>>>,
@@ -119,19 +109,18 @@ async fn post_images<T: Writer>(
         );
     }
 
-    let image_reader = match decode_image_reader(&image_field.data) {
-        Ok(reader) => reader,
-        Err(err) => {
-            log::error!("decode image error: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "decode image error.".to_string() }))
-            );
+    let workspace: FileWorkspaceInfo = match DBConfig::find(&conn, workspace_id.clone()) {
+        Ok(workspace) => {
+            match workspace {
+                Some(workspace) => workspace,
+                None => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Err(Json(BasicApiError { error_message: format!("workspace({workspace_id}) not found.") }))
+                    );
+                }
+            }
         },
-    };
-
-    let workspace = match DBConfig::find(&conn, workspace_id.clone()) {
-        Ok(workspace) => workspace,
         Err(err) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -139,29 +128,20 @@ async fn post_images<T: Writer>(
             );
         }
     };
-    let workspace = match workspace {
-        Some(workspace) => workspace,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: format!("workspace({workspace_id}) not found.") }))
-            );
-        }
-    };
 
-    let db_image = match DBImageInfo::create(
+    match DBImageInfo::create(
         &conn,
         &mut writer.clone(),
         &workspace,
         &FullFileName(image_field.file_name.clone()),
         &image_field.data,
     ) {
-        Ok(db_image) => { db_image },
+        Ok(_) => {},
         Err(err) => {
             log::error!("save icon error: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Err(Json(BasicApiError { error_message: "save icon error.".to_string() }))
+                Err(Json(BasicApiError { error_message: "save icon error.".to_string() })),
             );
         },
     };
