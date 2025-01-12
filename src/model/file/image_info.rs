@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use crate::model::db::config::Config as DBConfig;
-use crate::model::db::image_info::{ImageInfo as DBImageInfo};
+use crate::model::db::image_info::ImageInfo as DBImageInfo;
 use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::file::writer::Writer;
 use crate::util::ModelError;
@@ -53,7 +53,11 @@ impl ImageInfo {
         Ok(image_info)
     }
     
-    pub fn save_from_db<T: Writer>(writer: &mut T, workspace: &WorkspaceInfo, image_info: &DBImageInfo) -> Result<(), std::io::Error> {
+    pub fn save_from_db<T: Writer>(conn: &Connection, writer: &mut T, workspace: &WorkspaceInfo, image_info: &DBImageInfo) -> Result<(), Box<dyn std::error::Error>> {
+        // tag_idsを取得してユニークに
+        let tag_ids = image_info.tag_ids(conn)?;
+        let tag_ids = tag_ids.into_iter().collect::<std::collections::HashSet<String>>().into_iter().collect();
+
         let image_info = ImageInfo {
             image_id: image_info.image_id.clone(),
             file_name: image_info.file_name.clone(),
@@ -61,7 +65,7 @@ impl ImageInfo {
             width: image_info.width,
             height: image_info.height,
             created_at: image_info.created_at.clone(),
-            tags: image_info.tags.clone(),
+            tags: tag_ids,
         };
         let json = image_info.to_json()?;
         writer.save(image_info.get_file_image_info_path(workspace), json)?;

@@ -3,12 +3,15 @@ use serde::{Serialize, Deserialize};
 use rusqlite::{params, Connection};
 use image::ImageReader;
 use std::io::Cursor;
+use crate::model::db::config::Config as DBConfig;
+use crate::model::db::tag::Tag as DBTag;
+use crate::model::db::image_tag_map::ImageTagMap as DBImageTagMap;
 use crate::model::file::image::Image as FileImage;
 use crate::model::file::image_info::{ImageInfo as FileImageInfo, FullFileName, FileStem};
 use crate::model::file::workspace_info::WorkspaceInfo;
 use crate::model::entity::image::Image;
 use crate::model::file::writer::Writer;
-use crate::util::jst_time_string;
+use crate::util::{jst_time_string, ModelError};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ImageInfo {
@@ -23,11 +26,33 @@ pub struct ImageInfo {
     pub height: u32,
 
     pub created_at: String,
-
-    pub tags: Vec<String>,
 }
 
 impl ImageInfo {
+    pub fn insert(&self, conn: &Connection, workspace_id: &str) -> Result<(), Box<dyn Error>> {
+        conn.execute("
+            INSERT INTO image (
+                workspace_id
+                ,image_id
+                ,file_name
+                ,ext
+                ,width
+                ,height
+                ,created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        ", params![
+            workspace_id,
+            self.image_id,
+            self.file_name.0,
+            self.ext,
+            self.width,
+            self.height,
+            self.created_at,
+        ])?;
+
+        Ok(())
+    }
+
     pub fn create<T: Writer>(
         conn: &Connection,
         writer: &mut T,
@@ -49,30 +74,12 @@ impl ImageInfo {
             width: image_reader.width(),
             height: image_reader.height(),
             created_at: jst_time_string()?,
-            tags: vec![],
         };
         
-        conn.execute("
-            INSERT INTO image (
-                workspace_id
-                ,image_id
-                ,file_name
-                ,ext
-                ,width
-                ,height
-                ,created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-        ", params![
-            workspace_info.workspace_id,
-            image.image_id,
-            image.file_name.0,
-            image.ext,
-            image.width,
-            image.height,
-            image.created_at,
-        ])?;
+        image.insert(conn, &workspace_info.workspace_id)?;
 
         FileImageInfo::save_from_db(
+            conn,
             &mut writer.clone(),
             workspace_info,
             &image
@@ -88,7 +95,69 @@ impl ImageInfo {
         
         Ok(image)
     }
+    
+    pub fn add_tag<T: Writer>(&self, conn: &Connection, writer: &mut T, workspace_id: &str, tag_id: &str) -> Result<(), Box<dyn Error>> {
+        let tag = match DBTag::find(conn, workspace_id.to_string(), tag_id.to_string()) {
+            Ok(tag) => {
+                match tag {
+                    Some(tag) => tag,
+                    None => {
+                        log::error!("tag not found. workspace_id: {}, tag_id: {}", workspace_id, tag_id);
+                        return Err(Box::new(ModelError::new("tag not found".to_string())));
+                    }
+                }
+            },
+            Err(e) => {
+                log::error!("tag not found. workspace_id: {}, tag_id: {}, e: {}", workspace_id, tag_id, e);
+                return Err(Box::new(ModelError::new("tag not found".to_string())));
+            }
+        };
+        
+        let workspace = match DBConfig::find(conn, workspace_id.to_string())? {
+            Some(workspace) => workspace,
+            None => {
+                log::error!("workspace not found. workspace_id: {}", workspace_id);
+                return Err(Box::new(ModelError::new("workspace not found".to_string())));
+            }
+        };
+        
+        DBImageTagMap::add(conn, &self.image_id, &tag.tag_id)?;
+        
+        FileImageInfo::save_from_db(
+            conn,
+            &mut writer.clone(),
+            &workspace,
+            self
+        )?;
 
+        Ok(())
+    }
+    
+    pub fn remove_tag<T: Writer>(&self, conn: &Connection, writer: &mut T, workspace_id: &str, tag_id: &str) -> Result<(), Box<dyn Error>> {
+        let workspace = match DBConfig::find(conn, workspace_id.to_string())? {
+            Some(workspace) => workspace,
+            None => {
+                log::error!("workspace not found. workspace_id: {}", workspace_id);
+                return Err(Box::new(ModelError::new("workspace not found".to_string())));
+            }
+        };
+        
+        DBImageTagMap::remove(conn, &self.image_id, tag_id)?;
+        
+        FileImageInfo::save_from_db(
+            conn,
+            &mut writer.clone(),
+            &workspace,
+            self
+        )?;
+
+        Ok(())
+    }
+    
+    pub fn tag_ids(&self, conn: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
+        DBImageTagMap::get_tag_id(conn, &self.image_id)
+    }
+    
     pub fn get(conn: &Connection, workspace_id: String, page: u32) -> Result<Vec<Self>, Box<dyn Error>> {
         let mut stmt = conn.prepare("
             SELECT
@@ -112,7 +181,6 @@ impl ImageInfo {
                 width: row.get(3)?,
                 height: row.get(4)?,
                 created_at: row.get(5)?,
-                tags: vec![],
             })
         })?.collect::<Result<Vec<_>, _>>()?;
 
@@ -139,7 +207,6 @@ impl ImageInfo {
                 width: row.get(3)?,
                 height: row.get(4)?,
                 created_at: row.get(5)?,
-                tags: vec![],
             })
         })?.next();
         

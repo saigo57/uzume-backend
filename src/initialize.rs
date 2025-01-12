@@ -13,8 +13,8 @@ pub async fn initialize(conn: Arc<Mutex<Connection>>) -> Result<(), Box<dyn Erro
     let conn = conn.lock().await;
     let config = FileConfig::new()?;
     load_config(&conn, &config)?;
-    load_image_info(&conn, &config).await?;
     load_tags(&conn, &config).await?;
+    load_image_info(&conn, &config).await?;
     Ok(())
 }
 
@@ -39,7 +39,10 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), B
         let workspace_path = Path::new(&workspace_path);
         let images_path = workspace_path.join("images");
         if !images_path.is_dir() {
-            log::info!("images directory not found. skip load.");
+            match images_path.to_str() {
+                Some(path) => log::info!("images directory not found. skip load. image_path: {}", path),
+                None => log::info!("images directory not found. skip load. image_path: None"),
+            }
             return Ok(());
         }
 
@@ -65,7 +68,7 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), B
                 "INSERT INTO image (workspace_id, image_id, file_name, ext, width, height, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 [
                     workspace.workspace_id.clone(),
-                    image_info.image_id,
+                    image_info.image_id.clone(),
                     image_info.file_name.0,
                     image_info.ext,
                     image_info.width.to_string(),
@@ -73,6 +76,21 @@ async fn load_image_info(conn: &Connection, config: &FileConfig) -> Result<(), B
                     image_info.created_at,
                 ],
             )?;
+            
+            for tag_id in image_info.tags {
+                if tag_id == "_system_tag_uncategorized" {
+                    continue;
+                }
+
+                conn.execute(
+                    "INSERT INTO image_tag_map (image_id, tag_id) VALUES (?1, ?2)",
+                    [
+                        image_info.image_id.clone(),
+                        tag_id.clone(),
+                    ],
+                )?;
+                println!("image_id: {}, tag_id: {}", image_info.image_id.clone(), tag_id);
+            }
         }
     }
 

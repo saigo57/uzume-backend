@@ -45,6 +45,14 @@ pub async fn create_schema(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite:
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE image_tag_map (
+            image_id TEXT,
+            tag_id TEXT
+        )",
+        [],
+    )?;
+
     // for debug
     conn.execute(
         "INSERT INTO auth (access_token, workspace_id) VALUES (?1, ?2)",
